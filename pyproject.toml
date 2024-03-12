@@ -122,11 +122,11 @@ dependencies = [ # Optional
   "netcdf4",
   "scikit-image",
   "scikit-learn",
-  "blosc",
-  "torchmetrics",
-  "timm",
-  "albumentations",
-  "opencv-python-headless<4.3",
+  #"blosc",
+  #"torchmetrics",
+  #"timm",
+  #"albumentations",
+  #"opencv-python-headless<4.3",
   "seaborn"
   ]
 
