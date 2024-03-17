@@ -3,7 +3,7 @@ Adding language to Clay
 
 ## Installation
 
-Install Miniconda from [here](https://docs.conda.io/en/latest/miniconda.html) and then run the following commands to create the fdl-sar-env environment:
+Install Miniconda from [here](https://docs.conda.io/en/latest/miniconda.html) and then run the following commands to create the earth-text-env environment:
 
 ```bash
 conda env create -f environment.yml
