@@ -4,3 +4,4 @@ dependencies:
   - python=3.12
   - h5py
   - cchardet
+  - geopandas
