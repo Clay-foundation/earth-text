@@ -185,7 +185,7 @@ class OSMSimpleHandler(osmium.SimpleHandler):
         self.only_tag = only_tag
         self.apply_file(self.pbf_filepath)
 
-    
+
 class OSMChipHandler(osmium.SimpleHandler):
     def __init__(self, chip_id, chips_path, use_progress_bar=True):
         osmium.SimpleHandler.__init__(self)
@@ -246,39 +246,53 @@ class OSMChipHandler(osmium.SimpleHandler):
         
         # to be called after applying a file
         # consolidates everything in a single geodataframe
-        nodesdf = pd.DataFrame({k:v for k,v in self.nodes.items() if len(v['tags'])>0}).T
-        nodesdf = gpd.GeoDataFrame(nodesdf, crs=epsg4326)
-        nodesdf = nodesdf[[i.intersects(self.boundary) for i in nodesdf.geometry]]
-        nodesdf["geometry"] = [i.intersection(self.boundary) for i in nodesdf.geometry]
+        dfs = []
+        if len(self.nodes)>0:
+            nodesdf = pd.DataFrame({k:v for k,v in self.nodes.items() if len(v['tags'])>0}).T
+            nodesdf = gpd.GeoDataFrame(nodesdf, crs=epsg4326)
+            
+            if self.boundary is not None:
+                nodesdf = nodesdf[[i.intersects(self.boundary) for i in nodesdf.geometry]]
+                nodesdf["geometry"] = [i.intersection(self.boundary) for i in nodesdf.geometry]
+    
+            #nodes['tags'] = [tags2str(t) for t in nodes.tags]
+            nodesdf['kind'] = 'node'
+            nodesdf['length'] = 0
+            nodesdf['area'] = 0
+            self.nodesdf = nodesdf
+            dfs.append(nodesdf)
 
-        #nodes['tags'] = [tags2str(t) for t in nodes.tags]
-        nodesdf['kind'] = 'node'
-        nodesdf['length'] = 0
-        nodesdf['area'] = 0
-
-        #ways = [[i['geometry'], i['length'], i['area'] if 'area' in i.keys() else 0, tags2str(i['tags'])] for i in self.ways.values()]
-        waysdf = [[i['geometry'], i['length'], i['area'] if 'area' in i.keys() else 0, i['tags']] for i in self.ways.values()]
-        waysdf = gpd.GeoDataFrame(waysdf, columns=['geometry', 'length', 'area', 'tags'], crs=epsg4326)
-        waysdf['kind'] = 'way'
-        waysdf = waysdf[[i.intersects(self.boundary) for i in waysdf.geometry]]
-        waysdf["geometry"] = [i.intersection(self.boundary) for i in waysdf.geometry]
-
-        self.nodesdf = nodesdf
-        self.waysdf = waysdf
-
-        self.osmobjects = pd.concat([nodesdf, waysdf])
-
-        # cleaup tags and remove objects with no tags
-        newtags = []
-        for t in self.osmobjects.tags.values:
-            nt = {k:v for k,v in t.items() if not k in self.ignore_tags and sum([k.startswith(ti) for ti in self.ignore_tags if ti[-1]==':'])==0}
-            newtags.append(nt)
+        if len(self.ways)>0:
+            #ways = [[i['geometry'], i['length'], i['area'] if 'area' in i.keys() else 0, tags2str(i['tags'])] for i in self.ways.values()]
+            waysdf = [[i['geometry'], i['length'], i['area'] if 'area' in i.keys() else 0, i['tags']] for i in self.ways.values()]
+            waysdf = gpd.GeoDataFrame(waysdf, columns=['geometry', 'length', 'area', 'tags'], crs=epsg4326)
+            waysdf['kind'] = 'way'
+            try:
+                if self.boundary is not None:
+                    waysdf = waysdf[[i.intersects(self.boundary) for i in waysdf.geometry]]
+                    waysdf["geometry"] = [i.intersection(self.boundary) for i in waysdf.geometry]
         
-        self.osmobjects['tags'] = newtags
-        self.osmobjects = self.osmobjects[[len(i)>0 for i in newtags]]
+                self.waysdf = waysdf
+                dfs.append(waysdf)
+            except:
+                pass
 
-        # save objects
-        self.osmobjects.to_parquet(self.parquet_filepath)    
+        if len(dfs)>0:
+            self.osmobjects = pd.concat(dfs)
+    
+            # cleaup tags and remove objects with no tags
+            newtags = []
+            for t in self.osmobjects.tags.values:
+                nt = {k:v for k,v in t.items() if not k in self.ignore_tags and sum([k.startswith(ti) for ti in self.ignore_tags if ti[-1]==':'])==0}
+                newtags.append(nt)
+            
+            self.osmobjects['tags'] = newtags
+            self.osmobjects = self.osmobjects[[len(i)>0 for i in newtags]]
+    
+            # save objects
+            self.osmobjects.to_parquet(self.parquet_filepath)    
+        else:
+            print ("no objects found")
         return self
 
     def load_osmobjects(self):
