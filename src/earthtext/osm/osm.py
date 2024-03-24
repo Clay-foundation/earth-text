@@ -1,7 +1,9 @@
 import geopandas as gpd
 import shapely as sh
+from shapely.geometry import Point
 from pyproj import CRS
 epsg4326 = CRS.from_epsg(4326)
+epsg_california = CRS.from_epsg(26946)
 import pandas as pd
 from progressbar import progressbar as pbar
 import progressbar
@@ -11,14 +13,24 @@ import hashlib
 import osmium
 import sys
 import os
-
-import shapely as sh
-from shapely.geometry import Point
-from pyproj import CRS
-epsg4326 = CRS.from_epsg(4326)
-
+from joblib import Parallel
 
 from shapely.geometry import box, Polygon, MultiPolygon, GeometryCollection
+
+class mParallel(Parallel):
+    """
+    substitutes joblib.Parallel with richer verbose progress information
+    """
+    def _print(self, msg):
+        if self.verbose > 10:
+            fmsg = '[%s]: %s' % (self, msg)
+            sys.stdout.write('\r ' + fmsg)
+            sys.stdout.flush()
+
+
+#def remove_ignored_tags(t):
+#    ignore_tags = ['created_by', 'add:', 'gnis:', 'gtfs_id', 'tiger:', 'name', 'source', 'nhd:', 'wikipedia', 'ref']
+#    return {k:v for k,v in t.items() if not k in ignore_tags and sum([k.startswith(ti) for ti in ignore_tags if ti[-1]==':'])==0}    
 
 def get_region_hash(region):
     """
@@ -124,14 +136,74 @@ def katana(geometry, threshold, count=0, random_variance=0.1):
 
 def clean_tags(tags):
     # cleaup tags and remove objects with no tags
-    ignore_tags = ['created_by', 'add:', 'gnis:', 'gtfs_id', 'tiger:']
+    ignore_tags = ['created_by', 'addr:', 'gnis:', 'gtfs_id', 'tiger:', 'name', 'source', 'nhd:', 'wikipedia', 'ref', 'attribution',
+                  'note', 'protection_title', 'wikidata', 'FMMP_modified', 'FMMP_reviewed', 'ref:', 'plant:', 'access',
+                  'contact', 'acres', 'ele', 'oldref', 'oneway', 'lanes:', 'boundary', 'border_type', 'admin_level', 'fixme',
+                  'altname', 'lanes', 'maxspeed', 'maxspeed:', 'operator:', 'operator', 'COUNTY_NAM', 'source:', 'website', 'old_ref', 'name_1',
+                  'alt_name', 'name:', 'handicapped_accessible', 'old_railway_operator', 'caltrans:', 'ALAND', 'AREAID',
+                  'AWATER', 'MTFCC', 'latitude', 'longitude', 'military', 'source_ref', 'payment:', 'ohv', 'lot_description','lot_type',
+                  'barrier', 'access:', 'horse', 'tracktype', 'layer', 'cables', 'volcano:', 'intermitent', 'foot', 'bicycle', 'motor_vehicle',
+                  'seasonal', 'description', 'proposeinternet_accessd:', 'bakersfield:', 'official_name', 'official_name_1', 'destination', 'junction:',
+                  'owner', 'gauge', 'NHS', 'abandoned:', 'opening_hours', 'meadlsc_description', 'distance', 'FIXME', 'toilets:',
+                  'hgv:', 'capacity', 'capacity:', 'fee', 'intermittent', 'ID', 'county', 'csp:', 'traffic_signals', 'traffic_signals:',
+                  'lacounty:', 'start_date', 'height', 'width', 'direction', 'voltage', 'monitoring:', 'man_made', 'hgv', 'kern:',
+                  'turn:', 'brand:', 'brand', 'wheelchair', 'cuisine', 'not:', 'stop', 'short_name', 'demolished:', 'clothes',
+                  'network', 'network:',  'traffic_calming', 'phone', 'denomination', 'religion', 'healthcare', 'healthcare:',
+                  'old_name', 'area', 'contact', 'contact:', 'addr2:', 'advertising', 'check_date', 'designation', 'fuel:',
+                  'internet_access', 'reciclying_Type', 'atv', 'height_ft', 'width_ft', 'width:', 'old_name:', 'note_1',
+                  'destination:', 'bridge:name', 'bridge_ref', 'source_ref:', 'mono:', 'noname', 'cycleway:', 'disused:', 'generator:',
+                  'circuits', 'covered', 'end_date', 'frequency', 'electrified', 'informal', 'historic', 'lit', 'milepost:', 'noexit',
+                  'toll', 'maxwidth', 'wires', 'tracktype', 'mtb', 'COUNTYFP', 'Tiger:', 'wikimedia_commons', 'winter_service',
+                  'STATEFP', 'image', 'handicap', 'Open_Date', 'Parks_ID', 'Park_No', 'takeaway', 'url', 'unsigned_ref', 'tract', 
+                  'trail_visibility', 'surface:note', 'street:', 'step_count', 'smoking', 'abandoned', 'sidewalk', 'sidewalk:', 'roof:',
+                  'reviewed', 'ramp:', 'recycling_type', 'recycling:', 'postal_code', 'piste:', 'passenger_lines', 'proposed' ,'par', 
+                  'notes', 'note_2', 'internet_access:', 'gns:', 'ANSICODE', 'architect', 'artist_name', 'artwork_type', 'city_served',
+                  'faa', 'fax', 'hoops', 'manufacturer', 'FIXME:', 'atribution', 'alt_name:', 'bridge:', 'check_date:', 'comm_code',
+                  'datum:', 'dt_add', 'fields_id', 'fields', 'maxlength:', 'name_2', 'no_prmt_si', 'no_prmt', 'note:', 'no_site',
+                  'oper_add', 'old_ref:', 'scvwd:', 'mtb:', 'lot_no', 'hov:', 'date_on', 'dog', 'golf_cart', 'closest_town', 'beds', 'bench',
+                   'change:', 'handrail', 'opening_date', 'outdoor_seating', 'orientation', 'population', 'placement', 'sangis:', 'src:',
+                  'unisex', 'bak:', 'description2', 'drive_through', 'drink:', 'email', 'facility_name', 'is_in', 'information',
+                   'maxheight', 'maxweight', 'ownership', 'railway:', 'was:', 'road_marking', 'restriction', 'route', 'screen',
+                   'psv', 'private', 'odbl', 'odbl:', 'nudism', 'year_planted', 'tactile_paving', 'vehicle:', 'verified:', 'utility_wires',
+                   'opening_hours:', 'is_in:', 'length', 'area:', 'bicycle:', 'colour', 'capture', 'dt_mant', 'heritage:', 'len',
+                   'otis_id', 'nist:', 'primary_use', 'property_number', 'protect_class', 'shape_area', 'assmntdist', 'cost', 'name_alt', 'region',
+                   'shape_le_1', 'shape_len', 'abutters', 'access_aisle', 'branch', 'district', 'grades', 'managed', 'male', 'store_number',
+                   'subject', 'subject:', 'beauty', 'atm', 'animal', 'changing_table', 'cyclerating', 'fitness_station', 'lcn', 'membership', 
+                   'min_age', 'mofa', 'maxweight:', 'max_age', 'motor_vehicle:', 'placement:', 'sac_scale', 'route_ref', 'zoning',
+                   '_shape_area_', '_acres_', '_shape_leng_', 'agncy_name', 'agncy_id', 'agncy_lev', 'agncy_type', 'agncy_web',
+                   'des_tp', 'delivery', 'gap_sts', 'government', 'label_name', 'shape_star', 'shapestare', 'shape_stle', 'unit_id', 
+                   'unit_name', 'maxstay', 'elevation', 'self_service','zone', 'upload_version', 'sbc_apn', 'sbc_id', 'sbc_parcel', 'quantity',
+                   'phases', 'other_use', 'objectid', 'nrhp:', 'maintained', 'inscription', 'inscription:', 'incline', 'collection_times',
+                   'climbing:', 'website:', 'unit', 'service_times', 'shapestlen', 'rooms', 'ramp', 'proposed:', 'parking:', 'fence_type',
+                   'departures_board', 'crossing:', 'comment', 'apn', 'x_coordinate', 'y_coordinate', 'gtfs_location_type', 'gtfs_stop_code', 
+                   'flag', 'flag:', 'socket', 'socket:', 'hfcs', 'image_1', 'image', 'loc_name', 'beacon:', 'redwood_city_ca:',
+                   'nhd-shp:', 'adot_name', '3dr:', '4wd_only', '_address_', '_area', '_bldg_no_', '_desc__', '_fmssid_', '_globalid_',
+                   '_id_', '_name_', '_lcsid_', '_tnode__', '_type_', 'abbr_name', 'addr','address', 'address:', 'type', 'building:', 
+                   'paloalto_ca:', 'massgis:', 'construction:', 
+                ]
+
+    ignore_tags = [i.lower() for i in ignore_tags]
     
-    newtags = {k:v for k,v in tags.items() if not k in ignore_tags and sum([k.startswith(ti) for ti in ignore_tags if ti[-1]==':'])==0}
+    # comments
+    #  - may want to keep lanes info in the future (to denote wide hihghways visible from s2)
+    #  - 'plant:' has power plat types (solar, etc.)
+    #  -'traffic_signals' ??
+    #  - 'ammenity' ??
+    #  - surface ??
+    #  - tunnel ??
+    #  - iata / icao ??
+    #  - golf ??
+    #  - building:* ??
+    #  - office ??
+    #  - service ??
+    #  - public_transport ??
+    newtags = {str(k).lower():str(v) for k,v in tags.items() if v is not None}
+    newtags = {k:v for k,v in newtags.items() if not k in ignore_tags and sum([k.startswith(ti) for ti in ignore_tags if ti[-1]==':'])==0}
     
     return newtags
 
 class OSMSimpleHandler(osmium.SimpleHandler):
-
+    
     def __init__(self, pbf_filepath, use_progress_bar=True):
 
         osmium.SimpleHandler.__init__(self)
@@ -202,8 +274,6 @@ class OSMChipHandler(osmium.SimpleHandler):
         with open(self.geojson_filepath) as f:
             self.boundary = sh.from_geojson(f.read())
 
-        self.ignore_tags = ['created_by', 'add:', 'gnis:', 'gtfs_id', 'tiger:']
-
     def node(self, n):
         if self.pbar is not None:
             self.pbar.increment()
@@ -225,7 +295,7 @@ class OSMChipHandler(osmium.SimpleHandler):
         data['is_closed'] = w.is_closed()
 
         zz = gpd.GeoDataFrame([self.nodes[ni] for ni in data['node_ids']], crs=epsg4326)
-        zzcal = zz.to_crs(CRS.from_epsg(26946))
+        zzcal = zz.to_crs(epsg_california)
         line = sh.geometry.LineString(zzcal.geometry.values)
         data['length'] = line.length
 
@@ -283,7 +353,7 @@ class OSMChipHandler(osmium.SimpleHandler):
             # cleaup tags and remove objects with no tags
             newtags = []
             for t in self.osmobjects.tags.values:
-                nt = {k:v for k,v in t.items() if not k in self.ignore_tags and sum([k.startswith(ti) for ti in self.ignore_tags if ti[-1]==':'])==0}
+                nt = clean_tags(t)
                 newtags.append(nt)
             
             self.osmobjects['tags'] = newtags
