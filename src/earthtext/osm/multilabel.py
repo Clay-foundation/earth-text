@@ -62,11 +62,17 @@ class OSMKeyValueCodes:
         # maps to remove duplicated and standardize
         self.osm_keyvals = {k: list(set([self.map_keyval(k,vi)[1] for vi in v])) for k,v in self.raw_osm_keyvals.items()}
         
-        # assign a seq number to each keyval pair, including each single key (with no val)
-        self.osm_keyvals_strings = [f"{k}={v}" for k in self.raw_osm_keyvals.keys() for v in sorted(self.osm_keyvals[k]) ] + list(self.osm_keyvals.keys())
-        
+        # append key=* to account for single keys
+        for k in self.osm_keyvals.keys():
+            self.osm_keyvals[k].append("*")
+                
         # assigned a code to each keyvalue pair
-        self.keyvals_codes = {k:i for i,k in enumerate(sorted(self.osm_keyvals_strings))}
+        self.keyvals_codes = {}
+        code = 0
+        for k in sorted(list(self.osm_keyvals.keys())):
+            for vi in sorted(self.osm_keyvals[k]):
+                self.keyvals_codes[f"{k}={vi}"] = code
+                code += 1
 
         self.inverse_codes = {v:k for k,v in self.keyvals_codes.items()}
     
@@ -91,11 +97,12 @@ class OSMKeyValueCodes:
         """
         filters the key/value pairs to only those considered in the constructor
         after mapping to stardardize them
-        """
+        """        
+        
         # cleans and standardizes keyvals
         keyvals = {kk:vv for kk,vv in [self.map_keyval(k,v) for k,v in keyvals.items()]}
         
-        # key only keyvals as specified in __init__
+        # keep only keyvals as specified in __init__
         keyvals = {k:v for k,v in keyvals.items() if k in self.osm_keyvals.keys() and v in self.osm_keyvals[k]}
 
         return keyvals
@@ -103,7 +110,6 @@ class OSMKeyValueCodes:
     def get_codes(self, keyvals):
         """
         returns a list of codes, one for each key/value pair in the input dictionary
-        including a code for each single key (with no value).
         it returns only the codes for the key/value pairs considered in the constructor
         after mapping to stardardize them
         
@@ -113,9 +119,6 @@ class OSMKeyValueCodes:
         keyvals = self.filter_keyvals(keyvals)
         
         r = []
-        for k in keyvals.keys():
-            if k in self.keyvals_codes.keys():
-                r.append(self.keyvals_codes[k])
                      
         for k,v in keyvals.items():
             k,v = self.map_keyval(k,v)
@@ -124,6 +127,7 @@ class OSMKeyValueCodes:
                 code  = self.keyvals_codes[kvstring]
                 r.append(code)
         return r  
+
 
 class OSMMergedKeyValueCodes:
 
@@ -229,7 +233,8 @@ class ImageOSMChip:
         codes = kvmerged.merge_codes(closed_codes, open_codes)
     
         # if remove duplicates 
-        codes = list(set(codes))
+        if remove_duplicates:
+            codes = list(set(codes))
     
         # sorts them
         codes = sorted(codes)
@@ -241,3 +246,56 @@ class ImageOSMChip:
         ohcodes = np.zeros(max_code+1).astype(int)
         ohcodes[codes] = 1
         return ohcodes
+
+    def get_onehot(self):
+        """
+        returns
+        - a dataframe with 'area', 'length' and 'count' of each tag present in this chip
+          after filtering according to kvopen and kvclose, with the tags encoded by their
+          number code and columns ordered and filled in with zeros as a onehot encoding
+        - a list of the strings representing the tags present
+        """
+
+        osm = self.osm.copy()
+        osm = osm[[i=='way' for i in osm.kind.values]].copy()
+        osm['is_closed'] = [i>0 for i in osm['area'].values]
+        osm['is_open'] = [i==0 for i in osm['area'].values]
+
+        def add_stats(keyval_labels, key, val, area, length):
+            label = f"{key}={val}"
+            if not label in keyval_labels.keys():
+                keyval_labels[label] = {'area':0, 'length':0, 'count':0}
+        
+            keyval_labels[label]['area'] += area
+            keyval_labels[label]['length'] += length
+            keyval_labels[label]['count'] += 1
+                
+        
+        # aggregate area, length and count for each osm keyval
+        keyval_labels = {}
+        for _,o in osm.iterrows():
+            if o.is_closed:
+                tags = kvclosed.filter_keyvals(o.tags)
+            else:
+                tags = kvopen.filter_keyvals(o.tags)
+            for k,v in tags.items():
+                add_stats(keyval_labels, k,v, o['area'], o['length'])
+                add_stats(keyval_labels, k,'*', o['area'], o['length'])
+        
+        # dataframe with area, length and count per osm keyval
+        keyval_labels = pd.DataFrame(keyval_labels)
+        keyval_strs = sorted(keyval_labels.columns)
+        
+        # dataframe with codes instead of osm keyval
+        keyval_onehot = keyval_labels.copy()
+        keyval_onehot.columns = [kvmerged.keyvals_codes[c] for c in keyval_onehot.columns]
+        
+        # fillin non present codes with zeros
+        for code in range(np.max(list(kvmerged.keyvals_codes.values()))+1):
+            if not code in keyval_onehot.columns:
+                keyval_onehot[code] = [0,0,0]
+        
+        # sort columns
+        keyval_onehot = keyval_onehot[sorted(keyval_onehot.columns)]
+
+        return keyval_onehot,keyval_strs
