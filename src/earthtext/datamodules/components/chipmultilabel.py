@@ -18,11 +18,14 @@ class ChipMultilabelDataset(Dataset):
         chips_folder: str,
         split: str,
         chip_transforms = None,
-        get_strlabels = False
+        get_strlabels = False,
+        min_ohe_count = 1
     ):
 
         """
         get_strlabels: return also the string description of the multilabels present
+        min_ohe_count: returns a 0/1 ohe vector with 1 if the ohe count is > min_ohecount
+                       if None, it will return the ohe count
         """
 
         self.split = split
@@ -32,6 +35,7 @@ class ChipMultilabelDataset(Dataset):
         self.get_strlabels = get_strlabels
         self.metadata = io.read_multilabel_metadata(metadata_file)
         self.metadata = self.metadata[self.metadata['split']==split]
+        self.min_ohe_count = min_ohe_count
         nitems = len(self.metadata)
         # keep only the items for which there is actually a chip image file
         logger.info(f"checking chip files for {split} split")
@@ -59,7 +63,10 @@ class ChipMultilabelDataset(Dataset):
 
         item = self.metadata.iloc[idx]
         chip = io.read_chip(self.chips_folder, item['col'], item['row'])
-        multilabel = item.onehot_label
+        multilabel = item.onehot_count.astype(int)
+
+        if self.min_ohe_count is not None:
+            multilabel = (multilabel> self.min_ohe_count).astype(int)
 
         if self.chip_transforms is not None:
             chip = self.chip_transforms(chip)

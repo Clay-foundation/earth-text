@@ -8,6 +8,7 @@ class ChipMultilabelModule(LightningDataModule):
     def __init__(self,
         metadata_file: str,
         chips_folder: str,
+        min_ohe_count = 1,
         get_strlabels = False,
         chip_transforms = None,
         batch_size: int = 16,
@@ -23,6 +24,7 @@ class ChipMultilabelModule(LightningDataModule):
             chips_folder = chips_folder,
             chip_transforms = chip_transforms,
             get_strlabels = get_strlabels,
+            min_ohe_count = min_ohe_count,
             split="train",
         )
 
@@ -31,6 +33,7 @@ class ChipMultilabelModule(LightningDataModule):
             chips_folder = chips_folder,
             chip_transforms=chip_transforms,
             get_strlabels = get_strlabels,
+            min_ohe_count = min_ohe_count,
             split="val",
         )
 
@@ -39,6 +42,7 @@ class ChipMultilabelModule(LightningDataModule):
             chips_folder = chips_folder,
             chip_transforms = chip_transforms,
             get_strlabels = get_strlabels,
+            min_ohe_count = min_ohe_count,
             split="test",
         )
 

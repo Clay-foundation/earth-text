@@ -208,49 +208,25 @@ class ImageOSMChip:
         return self
     
     def show(self):
-        for ax, i in subplots(len(self.img), n_cols=6, usizex=4):
-            _x = self.img[i]
-            a,b = np.percentile(_x, [1,99])
-            plt.imshow(_x, vmin=a, vmax=b)
-            plt.colorbar()
+        for ax, i in subplots(4, n_cols=4, usizex=4):
             if i==0:
-                plt.title(self.chip_id)
+                rgbimg = np.transpose(self.img[:3],[1,2,0]).copy()
+                rgbimg /= 2000
+                rgbimg[rgbimg>1]=1
+                plt.imshow(rgbimg)
+            else:
+                _x = self.img[i-3]
+                a,b = np.percentile(_x, [1,99])
+                plt.imshow(_x, vmin=a, vmax=b)
+                plt.colorbar()
+                if i==0:
+                    plt.title(self.chip_id)
                 
-    def get_multilabel_keyvals(self, remove_duplicates=True):
-        codes = self.get_multilabel_codes(remove_duplicates=remove_duplicates)
-        return [kvmerged.inverse_codes[code] for code in codes]
-    
-    def get_multilabel_codes(self, remove_duplicates=True):
-        # get tags for open and closed ways
-        tags_openways   = [o.tags for _,o in self.osm.iterrows() if o.kind=='way' and o.area==0]
-        tags_closedways = [o.tags for _,o in self.osm.iterrows() if o.kind=='way' and o.area>0]
-    
-        # gets the codes for open and closed tags
-        open_codes = [i for t in tags_openways for i in kvopen.get_codes(t)]
-        closed_codes = [i for t in tags_closedways for i in kvclosed.get_codes(t)]
-    
-        # merges them
-        codes = kvmerged.merge_codes(closed_codes, open_codes)
-    
-        # if remove duplicates 
-        if remove_duplicates:
-            codes = list(set(codes))
-    
-        # sorts them
-        codes = sorted(codes)
-    
-        return codes
-
-    def get_multilabel_onehot(self):
-        codes = self.get_multilabel_codes(remove_duplicates=True)
-        ohcodes = np.zeros(max_code+1).astype(int)
-        ohcodes[codes] = 1
-        return ohcodes
 
     def get_onehot(self):
         """
         returns
-        - a dataframe with 'area', 'length' and 'count' of each tag present in this chip
+        - a dataframe with idexes 'area', 'length' and 'count' of each tag present in this chip
           after filtering according to kvopen and kvclose, with the tags encoded by their
           number code and columns ordered and filled in with zeros as a onehot encoding
         - a list of the strings representing the tags present
