@@ -129,7 +129,7 @@ dependencies = [ # Optional
   "geoplot",
   "einops",
   "vit_pytorch",
-  "pickleshare"
+  "pickleshare",
   #"blosc",
   #"torchmetrics",
   #"timm",
