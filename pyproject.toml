@@ -127,6 +127,9 @@ dependencies = [ # Optional
   "pyarrow",
   "pyrosm",
   "geoplot",
+  "einops",
+  "vit_pytorch",
+  "pickleshare"
   #"blosc",
   #"torchmetrics",
   #"timm",
