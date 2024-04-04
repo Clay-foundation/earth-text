@@ -130,11 +130,8 @@ dependencies = [ # Optional
   "einops",
   "vit_pytorch",
   "pickleshare",
-  #"blosc",
-  #"torchmetrics",
-  #"timm",
-  #"albumentations",
-  #"opencv-python-headless<4.3",
+  "osmium",
+  "rlxutils",
   "seaborn"
   ]
 
