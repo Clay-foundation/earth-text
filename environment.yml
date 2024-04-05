@@ -5,3 +5,4 @@ dependencies:
   - h5py
   - cchardet
   - geopandas
+  - einops
