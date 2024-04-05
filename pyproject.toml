@@ -127,11 +127,11 @@ dependencies = [ # Optional
   "pyarrow",
   "pyrosm",
   "geoplot",
-  #"blosc",
-  #"torchmetrics",
-  #"timm",
-  #"albumentations",
-  #"opencv-python-headless<4.3",
+  "einops",
+  "vit_pytorch",
+  "pickleshare",
+  "osmium",
+  "rlxutils",
   "seaborn"
   ]
 
