@@ -129,12 +129,9 @@ dependencies = [ # Optional
   "geoplot",
   "einops",
   "vit_pytorch",
-  "pickleshare"
-  #"blosc",
-  #"torchmetrics",
-  #"timm",
-  #"albumentations",
-  #"opencv-python-headless<4.3",
+  "pickleshare",
+  "osmium",
+  "rlxutils",
   "seaborn"
   ]
 

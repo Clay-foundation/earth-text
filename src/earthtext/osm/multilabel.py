@@ -211,19 +211,17 @@ class ImageOSMChip:
         for ax, i in subplots(4, n_cols=4, usizex=4):
             if i==0:
                 rgbimg = np.transpose(self.img[:3],[1,2,0]).copy()
-                rgbimg /= 2000
+                a,b = np.percentile(rgbimg, [5,99])
+                rgbimg /= b
                 rgbimg[rgbimg>1]=1
                 plt.imshow(rgbimg)
+                plt.title(self.chip_id)
             else:
-                _x = self.img[i-3]
-                a,b = np.percentile(_x, [1,99])
+                _x = self.img[i+2]
+                a,b = np.percentile(_x, [5,95])
                 plt.imshow(_x, vmin=a, vmax=b)
                 plt.colorbar()
-                if i==0:
-                    plt.title(self.chip_id)
                 
-
-
     def get_onehot(self):
         """
         returns
