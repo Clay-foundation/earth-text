@@ -223,7 +223,67 @@ class ImageOSMChip:
                     plt.title(self.chip_id)
                 
 
+
     def get_onehot(self):
+        """
+        returns
+        - a dataframe with idexes 'area', 'length' and 'count' of each tag present in this chip
+          after filtering according to kvopen and kvclose, with the tags encoded by their
+          number code and columns ordered and filled in with zeros as a onehot encoding
+        - a list of the strings representing the tags present
+        """
+
+        flatten = lambda x: [i for j in x for i in j]
+        t2str = lambda t: list(np.unique(flatten( [ [f"{k}={v}", f"{k}=*"] for k,v in t.items()])))
+        
+        oosm = self.osm.copy()
+        del (oosm['geometry'])
+        oosm = oosm[[i=='way' for i in oosm.kind.values]].copy()
+        oosm['is_closed'] = [i>0 for i in oosm['area'].values]
+        oosm['is_open'] = [i==0 for i in oosm['area'].values]
+        
+        oosm_open = oosm[oosm.is_open].copy()
+        oosm_closed = oosm[oosm.is_closed].copy()
+        
+        # filter tags
+        oosm_open['tags'] = [kvopen.filter_keyvals(t) for t in oosm_open.tags.values]
+        oosm_closed['tags'] = [kvclosed.filter_keyvals(t) for t in oosm_closed.tags.values]
+        
+        # remove osm objects which ended up with no tags
+        oosm_open   = oosm_open[[len(t)>0 for t in oosm_open.tags.values]]
+        oosm_closed = oosm_closed[[len(t)>0 for t in oosm_closed.tags.values]]
+        
+        # merge all
+        oosm = pd.concat([oosm_closed, oosm_open])
+        
+        # generate string keyvals for multilabel
+        oosm['stags'] = [ t2str(t) for t in oosm['tags']]
+        
+        # get the multilabel code for each surviving tag
+        oosm['ctags'] = [[kvmerged.keyvals_codes[si] for si in s] for s in oosm.stags.values]
+        
+        # counts, areas and lengths for each tag
+        ocounts = np.zeros(len(kvmerged.keyvals_codes)).astype(int)
+        oareas = np.zeros(len(kvmerged.keyvals_codes))
+        olengths = np.zeros(len(kvmerged.keyvals_codes))
+        for _,oi in oosm.iterrows():
+            for c in oi.ctags:
+                ocounts[c] += 1
+                oareas[c] += oi.area
+                olengths[c] += oi.length
+        
+        # check we count the ones with area plus the ones with length
+        assert np.all( (ocounts==0) == ( (oareas==0) & (olengths==0)))
+        
+        # make a list of keyval strings for which there is a count > 0
+        ostrs = [kvmerged.inverse_codes[i] for i in range(len(ocounts)) if ocounts[i]!=0]
+        
+        # assemble a dataframe
+        oor = pd.DataFrame([oareas, olengths, ocounts], index=['area', 'length', 'count'])
+
+        return oor, ostrs
+
+    def xget_onehot(self):
         """
         returns
         - a dataframe with idexes 'area', 'length' and 'count' of each tag present in this chip
