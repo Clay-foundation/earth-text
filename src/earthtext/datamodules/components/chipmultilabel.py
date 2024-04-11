@@ -38,7 +38,8 @@ class ChipMultilabelDataset(Dataset):
         get_strlabels = False,
         get_esawc_proportions = False,
         get_chip_id = False,
-        min_ohe_count = 1
+        min_ohe_count = 1,
+        cache_size = -1
     ):
 
         """
@@ -67,6 +68,9 @@ class ChipMultilabelDataset(Dataset):
         self.metadata = self.metadata[chips_exists]
         logger.info(f"read {split} split with {len(self.metadata)} chip files (out of {nitems})")
         
+        logger.info(f"max cache size is {cache_size}")
+        self.cache_size = cache_size
+        self.cache = {}
 
     def prepare_data(self):
         """This is an optional preprocessing step to be defined in each dataloader.
@@ -80,10 +84,13 @@ class ChipMultilabelDataset(Dataset):
 
 
     def __repr__(self):
-        return f"{self.__class__.__name__} {self.split} split with {len(self)} items"
+        return f"{self.__class__.__name__} {self.split} split with {len(self)} items, in cache {len(self.cache)} items"
 
 
     def __getitem__(self, idx):
+
+        if idx in self.cache.keys():
+            return self.cache[idx]
 
         r = {}        
 
@@ -115,6 +122,9 @@ class ChipMultilabelDataset(Dataset):
         if self.get_esawc_proportions:
             r['esawc_proportions'] = str(item.esawc_proportions)
 
+        # store in cache
+        if self.cache_size == -1 or len(self.cache) < self.cache_size:
+            self.cache[idx] = r
 
         return r
 

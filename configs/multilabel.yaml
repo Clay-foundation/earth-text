@@ -1,0 +1,14 @@
+dataloader:
+  _target_: earthtext.datamodules.chipmultilabel.ChipMultilabelModule
+  metadata_file:     /opt/data/california-worldcover-chips/california-worldcover-chips-osm-multilabels.parquet
+  embeddings_folder: /opt/data/california-worldcover-chips/embeddings_v0.2
+  get_strlabels: True
+  #num_workers: 10
+  min_ohe_count: 1
+
+model:
+  _target_: earthtext.models.multilabel.MultilabelModel
+  input_dim: 768
+  output_dim: 99
+  layers_spec: [512, 256, 128]
+  activation_fn: 'elu'
