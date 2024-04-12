@@ -35,18 +35,25 @@ class ChipMultilabelDataset(Dataset):
         embeddings_folder: str = None,
         patch_embeddings_folder: str = None,
         chip_transforms = None,
-        get_strlabels = False,
+        get_osm_ohecount = False,
+        get_osm_ohearea = False,
+        get_osm_ohelength = False,
+        get_osm_strlabels = False,
         get_esawc_proportions = False,
         get_chip_id = False,
-        min_ohe_count = 1,
+        multilabel_threshold_osm_ohecount = None,
+        multilabel_threshold_osm_ohearea = None,
         cache_size = -1
     ):
 
         """
-        get_strlabels: return also the string description of the multilabels present
-        min_ohe_count: returns a 0/1 ohe vector with 1 if the ohe count is > min_ohecount
+        get_osm_strlabels: return also the string description of the multilabels present
+        multilabel_threshold_osm_ohecount: returns a 0/1 ohe vector with 1 if the ohe count is > min_ohecount
                        if None, it will return the ohe count
         """
+
+        if sum([multilabel_threshold_osm_ohecount is None, multilabel_threshold_osm_ohearea is None])!=1:
+            raise ValueError("must specify exactly one of 'multilabel_threshold_osm_ohearea' or 'multilabel_threshold_osm_ohecount'")
 
         self.split = split
         self.chips_folder = chips_folder
@@ -56,10 +63,14 @@ class ChipMultilabelDataset(Dataset):
         self.get_esawc_proportions = get_esawc_proportions
         self.metadata_file = metadata_file
         self.get_chip_id = get_chip_id
-        self.get_strlabels = get_strlabels
+        self.get_osm_strlabels = get_osm_strlabels
+        self.get_osm_ohearea = get_osm_ohearea
+        self.get_osm_ohecount = get_osm_ohecount
+        self.get_osm_ohelength = get_osm_ohelength
         self.metadata = io.read_multilabel_metadata(metadata_file)
         self.metadata = self.metadata[self.metadata['split']==split]
-        self.min_ohe_count = min_ohe_count
+        self.multilabel_threshold_osm_ohecount = multilabel_threshold_osm_ohecount
+        self.multilabel_threshold_osm_ohearea = multilabel_threshold_osm_ohearea
         nitems = len(self.metadata)
         # keep only the items for which there is actually a chip image file
         logger.info(f"checking chip files for {split} split")
@@ -95,9 +106,14 @@ class ChipMultilabelDataset(Dataset):
         r = {}        
 
         item = self.metadata.iloc[idx]
-        multilabel = item.onehot_count.astype(int)
-        if self.min_ohe_count is not None:
-            multilabel = (multilabel> self.min_ohe_count).astype(int)
+        if self.multilabel_threshold_osm_ohecount is not None:
+            multilabel = item.onehot_count.astype(int)
+            multilabel = (multilabel> self.multilabel_threshold_osm_ohecount).astype(int)
+
+        if self.multilabel_threshold_osm_ohearea is not None:
+            # either area or a bit less than squared length
+            min_ohe_length = np.sqrt(self.multilabel_threshold_osm_ohearea)*4 / 1.5
+            multilabel = (item.onehot_area > self.multilabel_threshold_osm_ohearea) | (item.onehot_length > min_ohe_length)
 
         r['multilabel'] = torch.tensor(multilabel).type(torch.int8)
 
@@ -116,8 +132,17 @@ class ChipMultilabelDataset(Dataset):
         if self.patch_embeddings_folder is not None:
             r['patch_embedding'] = io.read_patch_embedding(self.patch_embeddings_folder,  item['col'], item['row'])
 
-        if self.get_strlabels:
-            r['str_multilabel'] = " ".join( item.string_labels)
+        if self.get_osm_strlabels:
+            r['osm_strlabels'] = " ".join(item.string_labels)
+
+        if self.get_osm_ohearea:
+            r['osm_ohearea'] = np.r_[item.onehot_area]
+
+        if self.get_osm_ohecount:
+            r['osm_ohecount'] = np.r_[item.onehot_count]
+
+        if self.get_osm_ohelength:
+            r['osm_ohelength'] = np.r_[item.onehot_length]
 
         if self.get_esawc_proportions:
             r['esawc_proportions'] = str(item.esawc_proportions)

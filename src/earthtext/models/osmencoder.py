@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import numpy as np
 from .utils import activation_from_str
 
-class MultilabelModel(nn.Module):
+class OSMEncoder(nn.Module):
     """
     assumes an input of shape [batch_size, h, w, 2, 2]
     """
@@ -25,8 +25,8 @@ class MultilabelModel(nn.Module):
             layers.append(nn.Linear(layers_spec[i], layers_spec[i+1]))
             layers.append(activation_from_str(activation_fn))
 
+        # just linear output
         layers.append(nn.Linear(layers_spec[-1], output_dim))
-        layers.append(activation_from_str('sigmoid'))
         
         self.layers = nn.Sequential(*layers)
         
