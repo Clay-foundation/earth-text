@@ -12,5 +12,8 @@ def activation_from_str(activation_str):
 
     if activation_str == 'sigmoid':
         return nn.Sigmoid()
+
+    if activation_str == 'tanh':
+        return nn.Tanh()
     
     raise ValueError(f"unknown activation function string '{activation_str}'")

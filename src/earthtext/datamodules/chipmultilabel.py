@@ -18,6 +18,9 @@ class ChipMultilabelModule(LightningDataModule):
         get_osm_ohelength = False,
         get_esawc_proportions = False,
         get_chip_id = False,
+        substract_embeddings_mean = True,
+        abs_embeddings = False,
+        norm_embeddings = False,
         chip_transforms = None,
         batch_size: int = 16,
         num_workers: int = 1,
@@ -39,6 +42,9 @@ class ChipMultilabelModule(LightningDataModule):
             get_osm_ohelength = get_osm_ohelength,
             get_esawc_proportions = get_esawc_proportions,
             get_chip_id = get_chip_id,
+            substract_embeddings_mean = substract_embeddings_mean,
+            abs_embeddings = abs_embeddings,
+            norm_embeddings = norm_embeddings,
             multilabel_threshold_osm_ohecount = multilabel_threshold_osm_ohecount,
             multilabel_threshold_osm_ohearea = multilabel_threshold_osm_ohearea,
             split="train",
@@ -56,6 +62,9 @@ class ChipMultilabelModule(LightningDataModule):
             get_osm_ohelength = get_osm_ohelength,
             get_esawc_proportions = get_esawc_proportions,
             get_chip_id = get_chip_id,
+            substract_embeddings_mean = substract_embeddings_mean,
+            abs_embeddings = abs_embeddings,
+            norm_embeddings = norm_embeddings,
             multilabel_threshold_osm_ohecount = multilabel_threshold_osm_ohecount,
             multilabel_threshold_osm_ohearea = multilabel_threshold_osm_ohearea,
             split="val",
@@ -73,10 +82,23 @@ class ChipMultilabelModule(LightningDataModule):
             get_osm_ohelength = get_osm_ohelength,
             get_esawc_proportions = get_esawc_proportions,
             get_chip_id = get_chip_id,
+            substract_embeddings_mean = substract_embeddings_mean,
+            abs_embeddings = abs_embeddings,
+            norm_embeddings = norm_embeddings,
             multilabel_threshold_osm_ohecount = multilabel_threshold_osm_ohecount,
             multilabel_threshold_osm_ohearea = multilabel_threshold_osm_ohearea,
             split="test",
         )
+
+    def disable_chip_loading(self):
+        self.train_dataset.disable_chip_loading = True
+        self.test_dataset.disable_chip_loading = True
+        self.val_dataset.disable_chip_loading = True
+
+    def enable_chip_loading(self):
+        self.train_dataset.disable_chip_loading = False
+        self.test_dataset.disable_chip_loading = False
+        self.val_dataset.disable_chip_loading = False
 
 
     def train_dataloader(self):
