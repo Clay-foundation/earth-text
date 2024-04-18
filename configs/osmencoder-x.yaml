@@ -7,9 +7,11 @@ dataloader:
   get_osm_ohearea: True
   get_osm_ohecount: True
   get_osm_ohelength: True
-  embeddings_normalization: signed_mean_substraction
+  embeddings_normalization: mean_stdev_norm
   multilabel_threshold_osm_ohecount: 1
-  #max_items: 100
+  normalize_input: True
+  batch_size: 32
+  max_items: 100
   
 model:
   _target_: earthtext.models.osmencoder.OSMEncoder
