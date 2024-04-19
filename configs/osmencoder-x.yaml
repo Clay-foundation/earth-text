@@ -1,0 +1,28 @@
+dataloader:
+  _target_: earthtext.datamodules.chipmultilabel.ChipMultilabelModule
+  metadata_file:     /opt/data/california-worldcover-chips/california-worldcover-chips-osm-multilabels.parquet
+  embeddings_folder: /opt/data/california-worldcover-chips/embeddings_v0.2
+  chips_folder: /opt/data/clay-california-worldcover-rgbnir-vvvh-chips/chips
+  get_osm_strlabels: True
+  get_osm_ohearea: True
+  get_osm_ohecount: True
+  get_osm_ohelength: True
+  embeddings_normalization: mean_stdev_norm
+  multilabel_threshold_osm_ohecount: 1
+  normalize_input: True
+  batch_size: 32
+  max_items: 100
+  
+model:
+  _target_: earthtext.models.osmencoder.OSMEncoder
+  input_dim: 297
+  output_dim: 768
+  #layers_spec: [512, 1024, 2048, 4096, 8192, 4096, 2048, 1024, 1024]
+  #layers_spec: [512, 1024]
+  layers_spec: [512, 1024, 2048, 1024]
+  activation_fn: 'relu'
+  abs_output: False
+  #output_activation_fn: tanh
+training:
+  loss: 'rmse'
+  epochs: 1
