@@ -19,9 +19,10 @@ def autocomplete_query(
         elif constraint == -1:
             kept_rows_mask *= (counts[:, col_ix] == 0)
 
-    print(kept_rows_mask.sum())
-    if kept_rows_mask.sum() > 0:
+    n_kept_rows = kept_rows_mask.sum()
+    print(n_kept_rows)
+    if n_kept_rows > 0:
         df = df.iloc[kept_rows_mask]  # keep rows that satisfy the constraints
-        return df.sample(n=n_samples, replace=True, axis=0, random_state=42)  # sample w replacement
+        return (df.sample(n=n_samples, replace=True, axis=0, random_state=42), n_kept_rows)  # sample w replacement
     else:
-        return df[0:0]  # return 0 rows
+        return (df[0:0], 0)  # return 0 rows
