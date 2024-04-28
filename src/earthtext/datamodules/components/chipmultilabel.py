@@ -5,6 +5,8 @@ import torch
 from torch.utils.data import Dataset
 from progressbar import progressbar as pbar
 from earthtext.io import io
+import matplotlib.pyplot as plt
+import geopandas as gpd
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 esawc_map = {
@@ -977,6 +979,10 @@ norm_names = {
 
 }    
 
+def normalize_embedding(embedding, norm_func_name):
+    return norm_names[norm_func_name](embedding)
+
+
 class ChipMultilabelDataset(Dataset):
 
     """
@@ -1101,7 +1107,7 @@ class ChipMultilabelDataset(Dataset):
         if self.embeddings_folder is not None:
             r['embedding'] = io.read_embedding(self.embeddings_folder,  item['col'], item['row']) 
             if self.embeddings_normalization is not None:
-                r['embedding'] = norm_names[self.embeddings_normalization](r['embedding'])
+                r['embedding'] = normalize_embedding(r['embedding'], self.embeddings_normalization)
 
         if self.patch_embeddings_folder is not None:
             r['patch_embedding'] = io.read_patch_embedding(self.patch_embeddings_folder,  item['col'], item['row'])
@@ -1133,3 +1139,61 @@ class ChipMultilabelDataset(Dataset):
 
         return r
 
+
+    def plot_chip_with_tags(self, idx, osm_tags):
+        
+        if not self.get_chip_id:
+            raise ValueError("must set 'get_chip_id' to true in this dataset to plot chips")
+        
+        if sum(["=" in i for i in osm_tags])!=len(osm_tags):
+            raise ValueError("must use '=' in all tags")
+        
+        # load osm objects
+        osm_folder = "/".join(self.embeddings_folder.split("/")[:-1])+"/osm"
+        chip_record = self.metadata.iloc[idx]
+        chip_id = chip_record.name
+        z = gpd.read_parquet(f"{osm_folder}/{chip_id}.parquet")
+
+        # filter tags
+        asterix_tags = [i.split("=")[0] for i in osm_tags if i.endswith("=*")]
+        regular_tags = {i.split("=")[0]:i.split("=")[1] for i in osm_tags if not i.endswith("=*")}
+        
+        def hastags(tags, asterix_tags, regular_tags):
+            if len(set(tags.keys()).intersection(asterix_tags))>0:
+                return True
+        
+            for k,v in regular_tags.items():
+                if k in tags.keys() and v == tags[k]:
+                    return True
+            return False
+        
+        zf = z[[hastags(eval(t), asterix_tags, regular_tags) for t in z.tags.values]]
+        
+        # get chip
+        item = self[idx]
+        c = item['chip'].numpy()[:3]
+        c = np.transpose(c, [1,2,0])
+        a,b = np.percentile(c, [5,99])
+        c = c *1.0 / b
+        c[c>1]=1
+        
+        # plot chip and geometries
+        xy = np.r_[[chip_record.geometry.exterior.xy]][0]
+        minlon, minlat = xy.min(axis=1)
+        maxlon, maxlat = xy.max(axis=1)
+        plt.imshow(c, extent=(minlon, maxlon, minlat, maxlat), alpha=.7)
+        
+        def plot_geom(geom):
+            if 'geoms' in dir(geom):
+                for gi in geom.geoms:
+                    plot_geom(gi)
+            elif 'exterior' in dir(geom):
+                plt.plot(*geom.exterior.xy, color="red", alpha=1, lw=2)
+            elif 'xy' in dir(geom):
+                plt.plot(*geom.xy, color="red", alpha=1, lw=2)
+        
+        for xgeom in zf.geometry:
+            k = plot_geom(xgeom)
+        
+        plt.axis("off");
+        
