@@ -5,6 +5,8 @@ import torch
 from torch.utils.data import Dataset
 from progressbar import progressbar as pbar
 from earthtext.io import io
+import matplotlib.pyplot as plt
+import geopandas as gpd
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 esawc_map = {
@@ -956,6 +958,47 @@ ohecount_std  = inputs_std[:99]
 ohearea_std   = inputs_std[99:198]
 ohelength_std = inputs_std[198:]
 
+def normalize_osm_vector_area(x):
+    return  (x - ohearea_mean) / ohearea_std
+
+def normalize_osm_vector_count(x):
+    return  (x - ohecount_mean) / ohecount_std
+
+def normalize_osm_vector_length(x):
+    return  (x - ohelength_mean) / ohelength_std
+
+
+def unnormalize_osm_vector_area(x, indexes=None):
+    if indexes is None:
+        r =  x * ohearea_std + ohearea_mean
+    else:
+        r =  x * ohearea_std[indexes] + ohearea_mean[indexes]
+    return r.astype(int)
+
+
+def unnormalize_osm_vector_count(x, indexes=None):
+    if indexes is None:
+        r =   x * ohecount_std + ohecount_mean
+    else:
+        r =   x * ohecount_std[indexes] + ohecount_mean[indexes]
+    return r.astype(int)
+
+def unnormalize_osm_vector_length(x, indexes=None):
+    if indexes is None:
+        r =  x * ohelength_std + ohelength_mean
+    else:
+        r =  x * ohelength_std[indexes] + ohelength_mean[indexes]
+    return r.astype(int)
+
+def unnormalize_osm_vector(x, indexes=None):
+    """
+    x is a dict with keys 'osm_ohecount', 'osm_ohearea', 'osm_ohelength'
+    """
+    return {'osm_ohecount':  unnormalize_osm_vector_count(x['osm_ohecount'], indexes),
+            'osm_ohearea':   unnormalize_osm_vector_area(x['osm_ohearea'], indexes),
+            'osm_ohelength': unnormalize_osm_vector_length(x['osm_ohelength'], indexes)
+    }
+
 def signed_mean_substraction(t):
     return np.sign(t) * np.abs(t - embeddings_mean)  
 
@@ -976,6 +1019,10 @@ norm_names = {
     'signed_mean_stdev_norm': signed_mean_stdev_norm
 
 }    
+
+def normalize_embedding(embedding, norm_func_name):
+    return norm_names[norm_func_name](embedding)
+
 
 class ChipMultilabelDataset(Dataset):
 
@@ -1101,7 +1148,7 @@ class ChipMultilabelDataset(Dataset):
         if self.embeddings_folder is not None:
             r['embedding'] = io.read_embedding(self.embeddings_folder,  item['col'], item['row']) 
             if self.embeddings_normalization is not None:
-                r['embedding'] = norm_names[self.embeddings_normalization](r['embedding'])
+                r['embedding'] = normalize_embedding(r['embedding'], self.embeddings_normalization)
 
         if self.patch_embeddings_folder is not None:
             r['patch_embedding'] = io.read_patch_embedding(self.patch_embeddings_folder,  item['col'], item['row'])
@@ -1112,18 +1159,18 @@ class ChipMultilabelDataset(Dataset):
         if self.get_osm_ohearea:
             r['osm_ohearea'] = np.r_[item.onehot_area]
             if self.normalize_input:
-                r['osm_ohearea'] = (r['osm_ohearea'] - ohearea_mean) / ohearea_std
-
+                r['osm_ohearea'] = normalize_osm_vector_area(r['osm_ohearea'])
+                
         if self.get_osm_ohecount:
             r['osm_ohecount'] = np.r_[item.onehot_count]
             if self.normalize_input:
-                r['osm_ohecount'] = (r['osm_ohecount'] - ohecount_mean) / ohecount_std
-
+                r['osm_ohecount'] = normalize_osm_vector_count(r['osm_ohecount'])
+                
         if self.get_osm_ohelength:
             r['osm_ohelength'] = np.r_[item.onehot_length]
             if self.normalize_input:
-                r['osm_ohelength'] = (r['osm_ohelength'] - ohelength_mean) / ohelength_std
-
+                r['osm_ohelength'] = normalize_osm_vector_length(r['osm_ohelength'])
+                
         if self.get_esawc_proportions:
             r['esawc_proportions'] = str(item.esawc_proportions)
 
@@ -1133,3 +1180,63 @@ class ChipMultilabelDataset(Dataset):
 
         return r
 
+    def reset_cache(self):
+        self.cache = {}
+
+    def plot_chip_with_tags(self, idx, osm_tags):
+        
+        if not self.get_chip_id:
+            raise ValueError("must set 'get_chip_id' to true in this dataset to plot chips")
+        
+        if sum(["=" in i for i in osm_tags])!=len(osm_tags):
+            raise ValueError("must use '=' in all tags")
+        
+        # load osm objects
+        osm_folder = "/".join(self.embeddings_folder.split("/")[:-1])+"/osm"
+        chip_record = self.metadata.iloc[idx]
+        chip_id = chip_record.name
+        z = gpd.read_parquet(f"{osm_folder}/{chip_id}.parquet")
+
+        # filter tags
+        asterix_tags = [i.split("=")[0] for i in osm_tags if i.endswith("=*")]
+        regular_tags = {i.split("=")[0]:i.split("=")[1] for i in osm_tags if not i.endswith("=*")}
+        
+        def hastags(tags, asterix_tags, regular_tags):
+            if len(set(tags.keys()).intersection(asterix_tags))>0:
+                return True
+        
+            for k,v in regular_tags.items():
+                if k in tags.keys() and v == tags[k]:
+                    return True
+            return False
+        
+        zf = z[[hastags(eval(t), asterix_tags, regular_tags) for t in z.tags.values]]
+        
+        # get chip
+        item = self[idx]
+        c = item['chip'].numpy()[:3]
+        c = np.transpose(c, [1,2,0])
+        a,b = np.percentile(c, [5,99])
+        c = c *1.0 / b
+        c[c>1]=1
+        
+        # plot chip and geometries
+        xy = np.r_[[chip_record.geometry.exterior.xy]][0]
+        minlon, minlat = xy.min(axis=1)
+        maxlon, maxlat = xy.max(axis=1)
+        plt.imshow(c, extent=(minlon, maxlon, minlat, maxlat), alpha=.7)
+        
+        def plot_geom(geom):
+            if 'geoms' in dir(geom):
+                for gi in geom.geoms:
+                    plot_geom(gi)
+            elif 'exterior' in dir(geom):
+                plt.plot(*geom.exterior.xy, color="red", alpha=1, lw=2)
+            elif 'xy' in dir(geom):
+                plt.plot(*geom.xy, color="red", alpha=1, lw=2)
+        
+        for xgeom in zf.geometry:
+            k = plot_geom(xgeom)
+        
+        plt.axis("off");
+        
