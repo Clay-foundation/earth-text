@@ -958,6 +958,47 @@ ohecount_std  = inputs_std[:99]
 ohearea_std   = inputs_std[99:198]
 ohelength_std = inputs_std[198:]
 
+def normalize_osm_vector_area(x):
+    return  (x - ohearea_mean) / ohearea_std
+
+def normalize_osm_vector_count(x):
+    return  (x - ohecount_mean) / ohecount_std
+
+def normalize_osm_vector_length(x):
+    return  (x - ohelength_mean) / ohelength_std
+
+
+def unnormalize_osm_vector_area(x, indexes=None):
+    if indexes is None:
+        r =  x * ohearea_std + ohearea_mean
+    else:
+        r =  x * ohearea_std[indexes] + ohearea_mean[indexes]
+    return r.astype(int)
+
+
+def unnormalize_osm_vector_count(x, indexes=None):
+    if indexes is None:
+        r =   x * ohecount_std + ohecount_mean
+    else:
+        r =   x * ohecount_std[indexes] + ohecount_mean[indexes]
+    return r.astype(int)
+
+def unnormalize_osm_vector_length(x, indexes=None):
+    if indexes is None:
+        r =  x * ohelength_std + ohelength_mean
+    else:
+        r =  x * ohelength_std[indexes] + ohelength_mean[indexes]
+    return r.astype(int)
+
+def unnormalize_osm_vector(x, indexes=None):
+    """
+    x is a dict with keys 'osm_ohecount', 'osm_ohearea', 'osm_ohelength'
+    """
+    return {'osm_ohecount':  unnormalize_osm_vector_count(x['osm_ohecount'], indexes),
+            'osm_ohearea':   unnormalize_osm_vector_area(x['osm_ohearea'], indexes),
+            'osm_ohelength': unnormalize_osm_vector_length(x['osm_ohelength'], indexes)
+    }
+
 def signed_mean_substraction(t):
     return np.sign(t) * np.abs(t - embeddings_mean)  
 
@@ -1118,18 +1159,18 @@ class ChipMultilabelDataset(Dataset):
         if self.get_osm_ohearea:
             r['osm_ohearea'] = np.r_[item.onehot_area]
             if self.normalize_input:
-                r['osm_ohearea'] = (r['osm_ohearea'] - ohearea_mean) / ohearea_std
-
+                r['osm_ohearea'] = normalize_osm_vector_area(r['osm_ohearea'])
+                
         if self.get_osm_ohecount:
             r['osm_ohecount'] = np.r_[item.onehot_count]
             if self.normalize_input:
-                r['osm_ohecount'] = (r['osm_ohecount'] - ohecount_mean) / ohecount_std
-
+                r['osm_ohecount'] = normalize_osm_vector_count(r['osm_ohecount'])
+                
         if self.get_osm_ohelength:
             r['osm_ohelength'] = np.r_[item.onehot_length]
             if self.normalize_input:
-                r['osm_ohelength'] = (r['osm_ohelength'] - ohelength_mean) / ohelength_std
-
+                r['osm_ohelength'] = normalize_osm_vector_length(r['osm_ohelength'])
+                
         if self.get_esawc_proportions:
             r['esawc_proportions'] = str(item.esawc_proportions)
 
@@ -1139,6 +1180,8 @@ class ChipMultilabelDataset(Dataset):
 
         return r
 
+    def reset_cache(self):
+        self.cache = {}
 
     def plot_chip_with_tags(self, idx, osm_tags):
         

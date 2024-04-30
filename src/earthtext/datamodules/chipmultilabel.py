@@ -101,35 +101,35 @@ class ChipMultilabelModule(LightningDataModule):
         self.val_dataset.disable_chip_loading = False
 
 
-    def train_dataloader(self):
+    def train_dataloader(self, shuffle=True):
         return DataLoader(
             dataset=self.train_dataset,
             batch_size=self.hparams.batch_size,
             num_workers=self.hparams.num_workers,
             pin_memory=self.hparams.pin_memory,
-            shuffle=True,
+            shuffle=shuffle,
             persistent_workers=True,
             prefetch_factor=8,
         )
 
-    def val_dataloader(self):
+    def val_dataloader(self, shuffle=False):
         return DataLoader(
             dataset=self.val_dataset,
             batch_size=self.hparams.batch_size,
             num_workers=self.hparams.num_workers,
             pin_memory=self.hparams.pin_memory,
-            shuffle=False,
+            shuffle=shuffle,
             persistent_workers=True,
             prefetch_factor=8,
         )
 
-    def test_dataloader(self):
+    def test_dataloader(self, shuffle=False):
         return DataLoader(
             dataset=self.test_dataset,
             batch_size=self.hparams.batch_size,
             num_workers=self.hparams.num_workers,
             pin_memory=self.hparams.pin_memory,
-            shuffle=False,
+            shuffle=shuffle,
             persistent_workers=True,
             prefetch_factor=8,
         )

@@ -3,6 +3,7 @@ from torch import nn
 import torch.nn.functional as F
 import numpy as np
 from .utils import activation_from_str
+from ..osm.multilabel import kvmerged
 
 class OSMEncoder(nn.Module):
     """
@@ -38,6 +39,9 @@ class OSMEncoder(nn.Module):
         if self.osm_tags_indexes is None:
             self.osm_tags_indexes = np.arange(self.osm_number_of_tags)
 
+        self.osm_tags_names = np.r_[[kvmerged.inverse_codes[i] for i in self.osm_tags_indexes]]
+
+
         self.input_dim = (use_osm_counts + use_osm_areas + use_osm_lengths) * len(self.osm_tags_indexes)
 
 
@@ -59,21 +63,70 @@ class OSMEncoder(nn.Module):
         
         self.layers = nn.Sequential(*layers)
         
+
+    def get_tag_names_for_osmcounts(self, osmcounts, min_count=1):
+        """
+        gets the tag names for the osmcounts>min_count taking into
+        account the classes selected in osm_tag_indexes
+        """
+        # in case we are given a full unfiltered vector
+        if len(osmcounts)==99:
+            osmcounts = osmcounts[self.osm_tags_indexes]
+
+        r = np.r_[self.osm_tags_names][osmcounts.astype(int)>=min_count]
+        return r
+        
+
     def make_input(self, batch):
+        """
+        assembles counts, areas and lengths into a single vector
+        filtering by 'self.osm_tag_indexes' and converting to 
+        tensor if required.
+        """
         x = []
+        mtype = self.layers[0].weight.type()
+        mdevice = self.layers[0].weight.device
         if self.use_osm_counts:
-            x.append(batch['osm_ohecount'][:, self.osm_tags_indexes])
+            xi = batch['osm_ohecount'][:, self.osm_tags_indexes]
+            if isinstance(xi, np.ndarray):
+                xi = torch.tensor(xi, device=mdevice).type(mtype)
+            x.append(xi)
         if self.use_osm_areas:
-            x.append(batch['osm_ohearea'][:, self.osm_tags_indexes])
+            xi = batch['osm_ohearea'][:, self.osm_tags_indexes]
+            if isinstance(xi, np.ndarray):
+                xi = torch.tensor(xi, device=mdevice).type(mtype)
+            x.append(xi)
         if self.use_osm_lengths:
-            x.append(batch['osm_ohelength'][:, self.osm_tags_indexes])
+            xi = batch['osm_ohelength'][:, self.osm_tags_indexes]
+            if isinstance(xi, np.ndarray):
+                xi = torch.tensor(xi, device=mdevice).type(mtype)
+            x.append(xi)
 
         x = torch.cat(x, axis=1).type(torch.float)
         return x
 
-    def forward(self, batch):
+    def unmake_input(self, x):
+        
+        n = len(self.osm_tags_indexes)
 
-        x = self.make_input(batch)
+        nx = x.shape[1]//3
+        if n*3 != x.shape[1]:
+            raise ValueError(f"osm vector size is not divisible by 3")
+
+        if nx != n:
+            raise ValueError(f"osm vector size {nx} does not match the number of restricted labels in 'osm_tag_indexes' which is {n}")
+
+
+        return {'osm_ohecount': x[:n],
+                'osm_ohearea': x[n:n*2],
+                'osm_ohelength': x[n*2:]}
+
+    def forward(self, x):
+
+        # if we are passed a batch with separated counts, areas and lengths
+        # otherwise we assume the input is already assembled
+        if isinstance(x, dict):
+            x = self.make_input(x)
 
         x = self.layers(x)     
 
