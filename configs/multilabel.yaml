@@ -4,6 +4,7 @@ dataloader:
   embeddings_folder: /opt/data/california-worldcover-chips/embeddings_v0.2
   get_osm_strlabels: True
   multilabel_threshold_osm_ohearea: 1000
+  get_chip_id: True
   
 model:
   _target_: earthtext.models.multilabel.MultilabelModel
