@@ -1,7 +1,8 @@
 dataloader:
   _target_: earthtext.datamodules.chipmultilabel.ChipMultilabelModule
   metadata_file:     /opt/data/california-worldcover-chips/california-worldcover-chips-osm-multilabels.parquet
-  embeddings_folder: /opt/data/california-worldcover-chips/embeddings_v0.2
+  embeddings_folder: /opt/data/california-worldcover-chips/embeddings_v0.2-20240426
+  #embeddings_folder: /opt/data/california-worldcover-chips/embeddings_v0.2-20240328
   chips_folder: /opt/data/clay-california-worldcover-rgbnir-vvvh-chips/chips
   get_osm_strlabels: True
   get_osm_ohearea: True
