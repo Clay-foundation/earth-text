@@ -87,14 +87,14 @@ class OSMClayModelSearcher:
             search_target = self.search_target
 
         if search_target == 'train':
-            search_dataloader = self.dataloader.train_dataloader(shuffle=False)
+            dataloader = self.dataloader.train_dataloader(shuffle=False)
         elif search_target == 'test':
-            search_dataloader = self.dataloader.test_dataloader(shuffle=False)
+            dataloader = self.dataloader.test_dataloader(shuffle=False)
         elif search_target == 'val':
-            search_dataloader = self.dataloader.val_dataloader(shuffle=False)
+            dataloader = self.dataloader.val_dataloader(shuffle=False)
 
-        search_dataloader.dataset.get_chip_id = True
-        return search_dataloader
+        dataloader.dataset.get_chip_id = True
+        return dataloader
 
     def get_search_dataset(self, search_target=None):
         if search_target is None:
@@ -128,7 +128,7 @@ class OSMClayModelSearcher:
             'chip_ids': chip_ids,
             'normalized_osm_vectors': osmvectors,
             'embeddings': embeddings,
-            'original_osm_vectors': chipmultilabel.unnormalize_osm_vector(osmvectors)
+            'original_osm_vectors': self.dataloader.train_dataset.normalizer.unnormalize_osm_vector(osmvectors)
         }
 
     def predict_embeddings(self, normalized_query_vector):
@@ -164,7 +164,7 @@ class QueryAutocompletionSampler:
         self.q_chip_ids,\
         self.q_embeddings,\
         self.q_normalized_osmvectors = get_embeddings_osmvectors_predictions(self.query_dataloader)
-        self.q_original_osmvectors = chipmultilabel.unnormalize_osm_vector(self.q_normalized_osmvectors)
+        self.q_original_osmvectors = searcher.dataloader.train_dataset.normalizer.unnormalize_osm_vector(self.q_normalized_osmvectors)
 
     def sample_queries(self, n_queries):
         o = self.q_normalized_osmvectors 
