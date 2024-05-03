@@ -2,8 +2,10 @@ dataloader:
   _target_: earthtext.datamodules.chipmultilabel.ChipMultilabelModule
   metadata_file:     /opt/data/california-worldcover-chips/california-worldcover-chips-osm-multilabels.parquet
   embeddings_folder: /opt/data/california-worldcover-chips/embeddings_v0.2
+  # embeddings_folder: /opt/data/california-worldcover-chips/embeddings_v0.2-20240426
   get_osm_strlabels: True
   multilabel_threshold_osm_ohearea: 1000
+  get_chip_id: True
   
 model:
   _target_: earthtext.models.multilabel.MultilabelModel
