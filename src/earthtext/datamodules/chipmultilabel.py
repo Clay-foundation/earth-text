@@ -17,13 +17,16 @@ class OSMandEmbeddingsNormalizer:
     def __init__(self, dataloader, force_compute=False):
         self.dataloader = dataloader
         self.train_dataset = dataloader.train_dataset
-        if self.train_dataset.embeddings_folder is None:
-            raise ValueError("must set 'embeddings_folder' in dataloader")
 
+        self.has_embeddings = self.train_dataset.embeddings_folder is not None
         
         self.force_compute = force_compute
-        embeddings_name = self.train_dataset.embeddings_folder.split("/")[-1]
-        
+
+        if self.has_embeddings:
+            embeddings_name = self.train_dataset.embeddings_folder.split("/")[-1]
+        else:
+            embeddings_name = "no_embeddings"
+
         # the name of the constants file contains the metadata file name and the embeddings folder name
         # so that different embeddings and metadatafiles get their own constants
         self.means_stdevs_file = ".".join(self.train_dataset.metadata_file.split(".")[:-1])+"_"+embeddings_name+"_meansstdevs.pkl"                
@@ -45,23 +48,26 @@ class OSMandEmbeddingsNormalizer:
             osm_areas.append(item.onehot_area)
             osm_lengths.append(item.onehot_length)
         
-            embedding = io.read_embedding(self.train_dataset.embeddings_folder,  item['col'], item['row']) 
-            embeddings.append(embedding)
+            if self.has_embeddings:
+                embedding = io.read_embedding(self.train_dataset.embeddings_folder,  item['col'], item['row']) 
+                embeddings.append(embedding)
                         
         self.constants = {
             'means':{
-                    'embeddings':  np.mean(np.r_[embeddings], axis=0),
                     'osm_counts':  np.mean(np.r_[osm_counts], axis=0),
                     'osm_areas':   np.mean(np.r_[osm_areas], axis=0),
                     'osm_lengths': np.mean(np.r_[osm_lengths], axis=0)
             },
             'stdevs':{
-                    'embeddings':  np.std(np.r_[embeddings], axis=0) + 1e-5,
                     'osm_counts':  np.std(np.r_[osm_counts], axis=0) + 1e-5,
                     'osm_areas':   np.std(np.r_[osm_areas], axis=0) + 1e-5,
                     'osm_lengths': np.std(np.r_[osm_lengths], axis=0) + 1e-5
             }
         }
+
+        if self.has_embeddings:
+            self.constants['means']['embeddings'] = np.mean(np.r_[embeddings], axis=0)
+            self.constants['stdevs']['embeddings'] = np.std(np.r_[embeddings], axis=0)
 
         with open(self.means_stdevs_file, "wb") as f:
             pickle.dump(self.constants, f)
@@ -69,6 +75,9 @@ class OSMandEmbeddingsNormalizer:
 
 
     def normalize_embeddings(self, x):
+        if not self.has_embeddings:
+            raise ValueError("this normalizer object has no embeddings")
+
         return  (x - self.constants['means']['embeddings']) / self.constants['stdevs']['embeddings']
 
     def normalize_osm_vector_area(self, x):
