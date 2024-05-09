@@ -1,7 +1,123 @@
 from lightning.pytorch import LightningDataModule
 from torch.utils.data import DataLoader
-
+import os
+from loguru import logger
+from ..io import io
 from .components.chipmultilabel import ChipMultilabelDataset
+import pickle
+from progressbar import progressbar as pbar
+import numpy as np
+
+class OSMandEmbeddingsNormalizer:
+    """
+    loops over the train part of a dataloader computing the means and stdevs
+    of osmvectors and embeddings, and saving them to a file
+    """
+
+    def __init__(self, dataloader, force_compute=False):
+        self.dataloader = dataloader
+        self.train_dataset = dataloader.train_dataset
+
+        self.has_embeddings = self.train_dataset.embeddings_folder is not None
+        
+        self.force_compute = force_compute
+
+        if self.has_embeddings:
+            embeddings_name = self.train_dataset.embeddings_folder.split("/")[-1]
+        else:
+            embeddings_name = "no_embeddings"
+
+        # the name of the constants file contains the metadata file name and the embeddings folder name
+        # so that different embeddings and metadatafiles get their own constants
+        self.means_stdevs_file = ".".join(self.train_dataset.metadata_file.split(".")[:-1])+"_"+embeddings_name+"_meansstdevs.pkl"                
+
+        self.compute()
+    
+    def compute(self):
+        if not self.force_compute and os.path.isfile(self.means_stdevs_file):
+            logger.info(f"reading means and stddevs from {self.means_stdevs_file}")
+            with open(self.means_stdevs_file, "rb") as f:
+                self.constants = pickle.load(f)
+            return
+        else:
+            logger.info("computing mean and stddevs for embeddings and osm vectors")
+
+        embeddings, osm_counts, osm_areas, osm_lengths = [], [], [], []
+        for _,item in pbar(self.train_dataset.metadata.iterrows(), max_value=len(self.train_dataset)):
+            osm_counts.append(item.onehot_count)
+            osm_areas.append(item.onehot_area)
+            osm_lengths.append(item.onehot_length)
+        
+            if self.has_embeddings:
+                embedding = io.read_embedding(self.train_dataset.embeddings_folder,  item['col'], item['row']) 
+                embeddings.append(embedding)
+                        
+        self.constants = {
+            'means':{
+                    'osm_counts':  np.mean(np.r_[osm_counts], axis=0),
+                    'osm_areas':   np.mean(np.r_[osm_areas], axis=0),
+                    'osm_lengths': np.mean(np.r_[osm_lengths], axis=0)
+            },
+            'stdevs':{
+                    'osm_counts':  np.std(np.r_[osm_counts], axis=0) + 1e-5,
+                    'osm_areas':   np.std(np.r_[osm_areas], axis=0) + 1e-5,
+                    'osm_lengths': np.std(np.r_[osm_lengths], axis=0) + 1e-5
+            }
+        }
+
+        if self.has_embeddings:
+            self.constants['means']['embeddings'] = np.mean(np.r_[embeddings], axis=0)
+            self.constants['stdevs']['embeddings'] = np.std(np.r_[embeddings], axis=0)
+
+        with open(self.means_stdevs_file, "wb") as f:
+            pickle.dump(self.constants, f)
+        logger.info(f"means and stddevs saved to {self.means_stdevs_file}")
+
+
+    def normalize_embeddings(self, x):
+        if not self.has_embeddings:
+            raise ValueError("this normalizer object has no embeddings")
+
+        return  (x - self.constants['means']['embeddings']) / self.constants['stdevs']['embeddings']
+
+    def normalize_osm_vector_area(self, x):
+        return  (x - self.constants['means']['osm_areas']) / self.constants['stdevs']['osm_areas']
+
+    def normalize_osm_vector_count(self, x):
+        return  (x - self.constants['means']['osm_counts']) / self.constants['stdevs']['osm_counts']
+
+    def normalize_osm_vector_length(self, x):
+        return  (x - self.constants['means']['osm_lengths']) / self.constants['stdevs']['osm_lengths']
+
+    def unnormalize_osm_vector_area(self, x, indexes=None):
+        if indexes is None:
+            r =  x * self.constants['stdevs']['osm_areas'] + self.constants['means']['osm_areas']
+        else:
+            r =  x * self.constants['stdevs']['osm_areas'][indexes] + self.constants['means']['osm_areas'][indexes]
+        return r.astype(int)
+
+    def unnormalize_osm_vector_count(self, x, indexes=None):
+        if indexes is None:
+            r =   x * self.constants['stdevs']['osm_counts'] + self.constants['means']['osm_counts']
+        else:
+            r =   x * self.constants['stdevs']['osm_counts'][indexes] + self.constants['means']['osm_counts'][indexes]
+        return r.astype(int)
+
+    def unnormalize_osm_vector_length(self, x, indexes=None):
+        if indexes is None:
+            r =  x * self.constants['stdevs']['osm_lengths'] + self.constants['means']['osm_lengths']
+        else:
+            r =  x * self.constants['stdevs']['osm_lengths'][indexes] + self.constants['means']['osm_lengths'][indexes]
+        return r.astype(int)
+
+    def unnormalize_osm_vector(self, x, indexes=None):
+        """
+        x is a dict with keys 'osm_ohecount', 'osm_ohearea', 'osm_ohelength'
+        """
+        return {'osm_ohecount':  self.unnormalize_osm_vector_count(x['osm_ohecount'], indexes),
+                'osm_ohearea':   self.unnormalize_osm_vector_area(x['osm_ohearea'], indexes),
+                'osm_ohelength': self.unnormalize_osm_vector_length(x['osm_ohelength'], indexes)
+        }
 
 
 class ChipMultilabelModule(LightningDataModule):
@@ -89,6 +205,12 @@ class ChipMultilabelModule(LightningDataModule):
             multilabel_threshold_osm_ohearea = multilabel_threshold_osm_ohearea,
             split="test",
         )
+
+        # setup normalizer object
+        self.normalizer = OSMandEmbeddingsNormalizer(self)
+        self.train_dataset.set_osm_and_embeddings_normalizer(self.normalizer)
+        self.test_dataset.set_osm_and_embeddings_normalizer(self.normalizer)
+        self.val_dataset.set_osm_and_embeddings_normalizer(self.normalizer)
 
     def disable_chip_loading(self):
         self.train_dataset.disable_chip_loading = True
