@@ -5,6 +5,7 @@ import torch
 from torch.utils.data import Dataset
 from progressbar import progressbar as pbar
 from earthtext.io import io
+from earthtext.osm import multilabel
 import matplotlib.pyplot as plt
 import geopandas as gpd
 import os
@@ -55,6 +56,7 @@ class ChipMultilabelDataset(Dataset):
         max_items = None,
         embeddings_normalization = True,
         osmvector_normalization = False,
+        osm_codeset = 'sentinel2',
         cache_size = -1
     ):
 
@@ -85,12 +87,25 @@ class ChipMultilabelDataset(Dataset):
         self.metadata = self.metadata[self.metadata['split']==split]
         self.multilabel_threshold_osm_ohecount = multilabel_threshold_osm_ohecount
         self.multilabel_threshold_osm_ohearea = multilabel_threshold_osm_ohearea
+        self.osm_codeset = osm_codeset
+
+        if 'embeddings' in self.metadata.columns:
+            if self.embeddings_folder is not None:
+                raise ValueError("cannot set 'embeddings_folder' since metadata already has an 'embeddings' column")
+            self.metadata_has_embeddings = True
+            logger.info("using embeddings found in metadata file")
+        else:
+            self.metadata_has_embeddings = False
+
+
         nitems = len(self.metadata)
         # keep only the items for which there is actually a chip image file
-        logger.info(f"checking chip files for {split} split")
-        chips_exists = [io.check_chip_exists(chips_folder, embeddings_folder, patch_embeddings_folder, i['col'], i['row']) \
-                               for _, i in pbar(self.metadata.iterrows(), max_value=len(self.metadata))]
-        self.metadata = self.metadata[chips_exists]
+        if chips_folder is not None:
+            logger.info(f"checking chip files for {split} split")
+            chips_exists = [io.check_chip_exists(chips_folder, embeddings_folder, patch_embeddings_folder, i['col'], i['row']) \
+                                for _, i in pbar(self.metadata.iterrows(), max_value=len(self.metadata))]
+            self.metadata = self.metadata[chips_exists]
+
         logger.info(f"read {split} split with {len(self.metadata)} chip files (out of {nitems})")
         
         if max_items is not None:
@@ -156,6 +171,9 @@ class ChipMultilabelDataset(Dataset):
             r['embedding'] = io.read_embedding(self.embeddings_folder,  item['col'], item['row']) 
             if self.embeddings_normalization:
                 r['embedding'] = self.normalizer.normalize_embeddings(r['embedding'])
+
+        if self.metadata_has_embeddings:
+            r['embedding'] = item['embeddings']
                 
         if self.patch_embeddings_folder is not None:
             r['patch_embedding'] = io.read_patch_embedding(self.patch_embeddings_folder,  item['col'], item['row'])
