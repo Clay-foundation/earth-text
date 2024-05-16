@@ -6,6 +6,7 @@ from omegaconf import DictConfig, OmegaConf
 import hydra
 from progressbar import progressbar as pbar
 import torch
+import pickle
 
 def get_osmvectors(dataloader):
 
@@ -26,12 +27,13 @@ def get_osmvectors(dataloader):
     
 class OSMEncoderWithAutocompletion:
 
-    def __init__(self, model_ckpt, autocompletion_source = 'train'):
+    def __init__(self, model_ckpt, norm_constants_fname=None, autocompletion_source = 'train'):
         logger.info(f"osmencoder model is {model_ckpt}")
         logger.info(f"autocompletion source is '{autocompletion_source}'")
         self.model_ckpt_fname = model_ckpt
         self.model_conf_fname = model_ckpt[:-5] + ".yaml"
         self.autocompletion_source = autocompletion_source
+        self.norm_constants_fname = norm_constants_fname
         self.conf = OmegaConf.load(self.model_conf_fname)
 
         if not os.path.isfile(self.model_ckpt_fname) or not os.path.isfile(self.model_conf_fname):
@@ -47,7 +49,12 @@ class OSMEncoderWithAutocompletion:
         
         logger.info("initializing dataloaders")
         self.dataloader = hydra.utils.instantiate(self.conf.dataloader)
-        
+
+        if self.norm_constants_fname is not None:
+            logger.info("updating normalization constants")
+            with open(self.norm_constants_fname, "rb") as f:
+                self.dataloader.normalizer.constants = pickle.load(f)
+
         if self.autocompletion_source == 'train':
             self.source_dataloader = self.dataloader.train_dataloader()
         elif self.autocompletion_source == 'test':
@@ -105,4 +112,7 @@ class OSMEncoderWithAutocompletion:
         q = self.sample_queries_with_conditions(min_counts, max_counts, min_areas, max_areas)
         query_osmvector = {k:v.mean(axis=0).reshape(1,-1) for k,v in q['normalized_query_vector'].items()}
         p = self.model(query_osmvector)[0].detach().numpy()
+
+        if self.dataloader.train_dataset.embeddings_normalization:
+            p = p*self.dataloader.normalizer.constants['stdevs']['embeddings'] + self.dataloader.normalizer.constants['means']['embeddings']
         return p
