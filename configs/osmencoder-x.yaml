@@ -1,8 +1,7 @@
 dataloader:
   _target_: earthtext.datamodules.chipmultilabel.ChipMultilabelModule
   metadata_file:     /opt/data/california-worldcover-chips/california-worldcover-chips-osm-multilabels.parquet
-  embeddings_folder: /opt/data/california-worldcover-chips/embeddings_v0.2-20240426
-  # embeddings_folder: /opt/data/california-worldcover-chips/embeddings_v0.2-20240328
+  embeddings_folder: /opt/data/california-worldcover-chips/embeddings_v1.0
   chips_folder: /opt/data/clay-california-worldcover-rgbnir-vvvh-chips/chips
   get_osm_strlabels: True
   get_osm_ohearea: True
@@ -18,10 +17,11 @@ model:
   output_dim: 768
   layers_spec: [512, 1024, 2048]
   use_osm_counts: True
-  use_osm_lengths: True    
-  #osm_tags_indexes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 13, 14, 15, 18, 20, 23, 25, 30, 31, 33, 37, 38, 43, 58, 61, 63, 64, 68, 71, 77, 78, 87, 93, 95, 96, 98]
-  osm_tags_indexes: [2, 3, 4, 5, 6, 7, 8, 13, 14, 18, 23, 30, 33, 37, 43, 58, 61, 68, 71, 84, 93]
+  use_osm_lengths: True
+  # osm_tags_indexes: [2, 3, 4, 5, 6, 7, 8, 13, 14, 18, 23, 30, 33, 37, 43, 58, 61, 68, 71, 84, 93]
+  osm_tags_indexes: [2, 3, 4, 5, 6, 7, 8, 13, 14, 18, 30, 31, 33, 37, 43, 45, 58, 61, 68, 84, 87, 93, 96, 97, 98]
   activation_fn: 'relu'
+
 training:
   loss: 'rmse'
   epochs: 1
