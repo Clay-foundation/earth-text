@@ -137,7 +137,7 @@ class ChipMultilabelDataset(Dataset):
         item = self.metadata.iloc[idx]
         if self.multilabel_threshold_osm_ohecount is not None:
             multilabel = item.onehot_count.astype(int)
-            multilabel = (multilabel> self.multilabel_threshold_osm_ohecount).astype(int)
+            multilabel = (multilabel >= self.multilabel_threshold_osm_ohecount).astype(int)
 
         if self.multilabel_threshold_osm_ohearea is not None:
             # either area or a bit less than squared length
