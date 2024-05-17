@@ -149,7 +149,7 @@ class ChipMultilabelDataset(Dataset):
         item = self.metadata.iloc[idx]
         if self.multilabel_threshold_osm_ohecount is not None:
             multilabel = item.onehot_count.astype(int)
-            multilabel = (multilabel> self.multilabel_threshold_osm_ohecount).astype(int)
+            multilabel = (multilabel >= self.multilabel_threshold_osm_ohecount).astype(int)
 
         if self.multilabel_threshold_osm_ohearea is not None:
             # either area or a bit less than squared length
@@ -173,7 +173,9 @@ class ChipMultilabelDataset(Dataset):
                 r['embedding'] = self.normalizer.normalize_embeddings(r['embedding'])
 
         if self.metadata_has_embeddings:
-            r['embedding'] = item['embeddings']
+            r['embedding'] = item['embeddings'].copy()
+            if self.embeddings_normalization:
+                r['embedding'] = self.normalizer.normalize_embeddings(r['embedding'])
                 
         if self.patch_embeddings_folder is not None:
             r['patch_embedding'] = io.read_patch_embedding(self.patch_embeddings_folder,  item['col'], item['row'])
