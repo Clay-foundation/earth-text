@@ -9,6 +9,7 @@ dataloader:
   multilabel_threshold_osm_ohecount: 1
   osmvector_normalization: True
   batch_size: 8
+  num_workers: 10
 
 model:
   _target_: earthtext.models.osmencoder.OSMEncoder
