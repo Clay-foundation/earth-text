@@ -118,7 +118,6 @@ class OSMEncoderWithAutocompletion:
         q = self.sample_queries_with_conditions(min_counts, max_counts, min_areas, max_areas)
         query_osmvector = {k:v.mean(axis=0).reshape(1,-1) for k,v in q['normalized_query_vector'].items()}
         p = self.model(query_osmvector)[0].detach().numpy()
-
         p = self.dataloader.normalizer.unnormalize_embeddings(p)
 
         return p
