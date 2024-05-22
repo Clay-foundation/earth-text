@@ -1,5 +1,5 @@
 from .. import datamodules
-from ..osm.multilabel import kvmerged
+from ..osm.multilabel import OSMCodeSets
 from ..datamodules.components import chipmultilabel
 from loguru import logger
 import os
@@ -151,7 +151,7 @@ class OSMClayModelSearcher:
 
 class QueryAutocompletionSampler:
 
-    def __init__(self, searcher, query_source = 'test'):
+    def __init__(self, osm_codeset, searcher, query_source = 'test'):
         """
         searcher: searcher objects
         query_dataloader: from where queries are sampled
@@ -165,6 +165,7 @@ class QueryAutocompletionSampler:
         self.q_embeddings,\
         self.q_normalized_osmvectors = get_embeddings_osmvectors_predictions(self.query_dataloader)
         self.q_original_osmvectors = searcher.dataloader.train_dataset.normalizer.unnormalize_osm_vector(self.q_normalized_osmvectors)
+        self.osm_codeset = osm_codeset
 
     def sample_queries(self, n_queries):
         o = self.q_normalized_osmvectors 
@@ -183,6 +184,9 @@ class QueryAutocompletionSampler:
             min_counts = {'building=*':100}
             max_counts = {'natural=*': 0}
         """
+
+        kvmerged = OSMCodeSets.get(self.osm_codeset)['kvmerged']
+
         query_min_counts = np.zeros(len(kvmerged.inverse_codes))
         for k,v in min_counts.items():
             query_min_counts[kvmerged.keyvals_codes[k]] = v

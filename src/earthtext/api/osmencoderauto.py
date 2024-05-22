@@ -1,11 +1,13 @@
 from loguru import logger
 import numpy as np
 import os
-from earthtext.osm.multilabel import kvmerged
+from earthtext.osm.multilabel import OSMCodeSets
 from omegaconf import DictConfig, OmegaConf
 import hydra
 from progressbar import progressbar as pbar
 import torch
+import pickle
+
 
 def get_osmvectors(dataloader):
 
@@ -26,13 +28,18 @@ def get_osmvectors(dataloader):
     
 class OSMEncoderWithAutocompletion:
 
-    def __init__(self, model_ckpt, autocompletion_source = 'train'):
+    def __init__(self, model_ckpt, norm_constants_fname=None, autocompletion_source = 'train', osm_codeset='sentinel2'):
         logger.info(f"osmencoder model is {model_ckpt}")
         logger.info(f"autocompletion source is '{autocompletion_source}'")
         self.model_ckpt_fname = model_ckpt
         self.model_conf_fname = model_ckpt[:-5] + ".yaml"
         self.autocompletion_source = autocompletion_source
+        self.norm_constants_fname = norm_constants_fname
         self.conf = OmegaConf.load(self.model_conf_fname)
+        self.osm_codeset = osm_codeset
+
+        self.kvmerged = OSMCodeSets.get(osm_codeset)['kvmerged']
+
 
         if not os.path.isfile(self.model_ckpt_fname) or not os.path.isfile(self.model_conf_fname):
             raise ValueError("cannot find model or conf")
@@ -47,7 +54,13 @@ class OSMEncoderWithAutocompletion:
         
         logger.info("initializing dataloaders")
         self.dataloader = hydra.utils.instantiate(self.conf.dataloader)
-        
+
+        if self.norm_constants_fname is not None:
+            logger.info("updating normalization constants")
+            with open(self.norm_constants_fname, "rb") as f:
+                self.dataloader.normalizer.constants = pickle.load(f)
+            self.dataloader.normalizer.has_metadata_embeddings = True
+
         if self.autocompletion_source == 'train':
             self.source_dataloader = self.dataloader.train_dataloader()
         elif self.autocompletion_source == 'test':
@@ -67,21 +80,21 @@ class OSMEncoderWithAutocompletion:
             min_counts = {'building=*':100}
             max_counts = {'natural=*': 0}
         """
-        query_min_counts = np.zeros(len(kvmerged.inverse_codes))
+        query_min_counts = np.zeros(len(self.kvmerged.inverse_codes))
         for k,v in min_counts.items():
-            query_min_counts[kvmerged.keyvals_codes[k]] = v
+            query_min_counts[self.kvmerged.keyvals_codes[k]] = v
         
-        query_max_counts = np.zeros(len(kvmerged.inverse_codes)) + np.inf
+        query_max_counts = np.zeros(len(self.kvmerged.inverse_codes)) + np.inf
         for k,v in max_counts.items():
-            query_max_counts[kvmerged.keyvals_codes[k]] = v
+            query_max_counts[self.kvmerged.keyvals_codes[k]] = v
 
-        query_min_areas = np.zeros(len(kvmerged.inverse_codes))
+        query_min_areas = np.zeros(len(self.kvmerged.inverse_codes))
         for k,v in min_areas.items():
-            query_min_areas[kvmerged.keyvals_codes[k]] = v
+            query_min_areas[self.kvmerged.keyvals_codes[k]] = v
         
-        query_max_areas = np.zeros(len(kvmerged.inverse_codes)) + np.inf
+        query_max_areas = np.zeros(len(self.kvmerged.inverse_codes)) + np.inf
         for k,v in max_areas.items():
-            query_max_areas[kvmerged.keyvals_codes[k]] = v
+            query_max_areas[self.kvmerged.keyvals_codes[k]] = v
 
         filter_cmin = self.q_original_osmvectors['osm_ohecount']>=query_min_counts
         filter_cmax = self.q_original_osmvectors['osm_ohecount']<=query_max_counts
@@ -105,4 +118,6 @@ class OSMEncoderWithAutocompletion:
         q = self.sample_queries_with_conditions(min_counts, max_counts, min_areas, max_areas)
         query_osmvector = {k:v.mean(axis=0).reshape(1,-1) for k,v in q['normalized_query_vector'].items()}
         p = self.model(query_osmvector)[0].detach().numpy()
+        p = self.dataloader.normalizer.unnormalize_embeddings(p)
+
         return p

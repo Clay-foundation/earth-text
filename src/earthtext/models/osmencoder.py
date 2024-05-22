@@ -3,7 +3,7 @@ from torch import nn
 import torch.nn.functional as F
 import numpy as np
 from .utils import activation_from_str
-from ..osm.multilabel import kvmerged
+from ..osm.multilabel import OSMCodeSets
 
 class OSMEncoder(nn.Module):
     """
@@ -15,10 +15,10 @@ class OSMEncoder(nn.Module):
                  activation_fn='relu', 
                  output_activation_fn=None,
                  osm_tags_indexes = None,
-                 osm_number_of_tags = 99,
                  use_osm_counts = True,
                  use_osm_areas = True,
                  use_osm_lengths = True,
+                 osm_codeset = 'sentinel2'
         ):
         super().__init__()
 
@@ -26,21 +26,22 @@ class OSMEncoder(nn.Module):
         self.layers_spec = layers_spec
         self.activation_fn = activation_fn
         self.output_activation_fn = output_activation_fn
-        self.osm_number_of_tags = osm_number_of_tags
         self.osm_tags_indexes = np.r_[osm_tags_indexes] if osm_tags_indexes is not None else None
         self.use_osm_counts = use_osm_counts
         self.use_osm_areas = use_osm_areas
         self.use_osm_lengths = use_osm_lengths
+        self.osm_codeset = osm_codeset
 
         if self.use_osm_counts + self.use_osm_areas + self.use_osm_lengths == 0:
             raise ValueError("must use at least one of 'use_osm_counts', 'use_osm_areas' and 'use_osm_lengths'")
 
 
+        kvmerged = OSMCodeSets.get(osm_codeset)['kvmerged']
+
         if self.osm_tags_indexes is None:
-            self.osm_tags_indexes = np.arange(self.osm_number_of_tags)
+            self.osm_tags_indexes = np.arange(len(kvmerged.inverse_codes))
 
         self.osm_tags_names = np.r_[[kvmerged.inverse_codes[i] for i in self.osm_tags_indexes]]
-
 
         self.input_dim = (use_osm_counts + use_osm_areas + use_osm_lengths) * len(self.osm_tags_indexes)
 
