@@ -7,56 +7,45 @@ import matplotlib.pyplot as plt
 import geopandas as gpd
 from collections import OrderedDict
 import pandas as pd
+from loguru import logger
 from . import osm
 
 class ImageOSMData:
 
-    def __init__(self, imgs_folder, osmobjs_folder, master_index):
+    def __init__(self, imgs_folder, osmobjs_folder, master_index, osm_codeset):
         self.imgs_folder = imgs_folder
         self.osmobjs_folder = osmobjs_folder
         self.master_index = master_index
+        self.osm_codeset = osm_codeset
 
-    def init_index(self):
-        self.m = gpd.read_file(self.master_index)
-        self.m.index = [osm.get_region_hash(gi) for gi in self.m.geometry.values]
+    def init_index(self, compute_hashid=True):
+        if self.master_index.endswith('.parquet'):
+            self.m = gpd.read_parquet(self.master_index)
+        else:
+            self.m = gpd.read_file(self.master_index)
+
+        if compute_hashid:
+            self.m.index = [osm.get_region_hash(gi) for gi in self.m.geometry.values]
         return self
 
     def sample_chip(self):
         chip_id = self.m.index[np.random.randint(len(self.m))]
         return ImageOSMChip(self, chip_id)
     
+
 class OSMKeyValueCodes:
 
     def __init__(self, kind):
 
         if not kind in ['openways', 'closedways']:
             raise ValueError(f"invalid kind '{kind}', kind must be 'openways' or 'closedways'")
-
-        if kind=='closedways':
-            raw_osm_keyvals = {}
-            raw_osm_keyvals['landuse']  = ['residential', 'grass', 'farmland', 'meadow', 'commercial', 'orchard', 'vineyard', 'industrial', 
-                                                   'retail', 'farmyard', 'forest', 'military', 'farm', 'cemetery', 'brownfield', 'quarry', 'greenfield']
-            raw_osm_keyvals['natural']  = ['water', 'wood', 'scrub', 'sand', 'grassland', 'wetland', 'bare_rock', 'coastline', 'heath', 'valley', 
-                                                  'desert', 'cliff', 'scree', 'beach', 'mountain_range', 'mud', 'bay']
-            raw_osm_keyvals['leisure']  = ['pitch', 'park', 'garden', 'nature_reserve', 'sports_centre', 'golf_course', 'track', 'schoolyard', 'stadium']
-            raw_osm_keyvals['water']    = ['pond', 'reservoir', 'lake', 'river', 'canal', 'wastewater', 'stream', 'ditch', 'stream;river']
-            raw_osm_keyvals['sport']    = ['baseball', 'soccer', 'american_football', 'running', 'equestrian', 'athletics', 'motor', 'multi']
-            raw_osm_keyvals['building'] = ['house', 'residential', 'apartments', 'industrial', 'school', 'warehouse']
-            raw_osm_keyvals['surface']  = ['asphalt', 'concrete', 'paved', 'gravel', 'sand', 'grass']
-            raw_osm_keyvals['crop']     = ['grape', 'field_cropland', 'WINE GRAPES', 'native_pasture']
-            raw_osm_keyvals['power']    = ['generator', 'substation', 'plant']
-            raw_osm_keyvals['parking']  = ['surface', 'multi-storey']
-            raw_osm_keyvals['highway']  = ['track']
-            raw_osm_keyvals['waterway'] = ['dam']
-            raw_osm_keyvals['amenity']  = ['parking']
-            
-        elif kind == 'openways':
-            raw_osm_keyvals = {}
-            raw_osm_keyvals['highway']  = ['motorway', 'residential', 'track']
-            raw_osm_keyvals['waterway'] = ['stream', 'river']
-
-        self.raw_osm_keyvals = raw_osm_keyvals
+        self.kind = kind
+        self.raw_osm_keyvals = self.init_keyvals()
         self.init_codes()
+
+
+    def init_keyvals(self):
+        raise NotImplementedError()
 
     def init_codes(self):
         # maps to remove duplicated and standardize
@@ -84,14 +73,7 @@ class OSMKeyValueCodes:
 
         returns: a (key,value) tuple with the mapped keyval, or (None, None) 
         """
-        k,v = key,val
-        
-        if k=='crop' and v=='WINE GRAPES':
-            k, v = 'crop', 'grape'
-        if k=='water' and v=='stream;river':
-            k, v = 'water', 'stream'
-
-        return k, v
+        return key,val
 
     def filter_keyvals(self, keyvals):
         """
@@ -129,6 +111,93 @@ class OSMKeyValueCodes:
         return r  
 
 
+class OSMKeyValueCodesSentinel2(OSMKeyValueCodes):
+
+
+    def init_keyvals(self):
+        if self.kind=='closedways':
+            raw_osm_keyvals = {}
+            raw_osm_keyvals['landuse']  = ['residential', 'grass', 'farmland', 'meadow', 'commercial', 'orchard', 'vineyard', 'industrial', 
+                                                   'retail', 'farmyard', 'forest', 'military', 'farm', 'cemetery', 'brownfield', 'quarry', 'greenfield']
+            raw_osm_keyvals['natural']  = ['water', 'wood', 'scrub', 'sand', 'grassland', 'wetland', 'bare_rock', 'coastline', 'heath', 'valley', 
+                                                  'desert', 'cliff', 'scree', 'beach', 'mountain_range', 'mud', 'bay']
+            raw_osm_keyvals['leisure']  = ['pitch', 'park', 'garden', 'nature_reserve', 'sports_centre', 'golf_course', 'track', 'schoolyard', 'stadium']
+            raw_osm_keyvals['water']    = ['pond', 'reservoir', 'lake', 'river', 'canal', 'wastewater', 'stream', 'ditch', 'stream;river']
+            raw_osm_keyvals['sport']    = ['baseball', 'soccer', 'american_football', 'running', 'equestrian', 'athletics', 'motor', 'multi']
+            raw_osm_keyvals['building'] = ['house', 'residential', 'apartments', 'industrial', 'school', 'warehouse']
+            raw_osm_keyvals['surface']  = ['asphalt', 'concrete', 'paved', 'gravel', 'sand', 'grass']
+            raw_osm_keyvals['crop']     = ['grape', 'field_cropland', 'WINE GRAPES', 'native_pasture']
+            raw_osm_keyvals['power']    = ['generator', 'substation', 'plant']
+            raw_osm_keyvals['parking']  = ['surface', 'multi-storey']
+            raw_osm_keyvals['highway']  = ['track']
+            raw_osm_keyvals['waterway'] = ['dam']
+            raw_osm_keyvals['amenity']  = ['parking']
+            
+        elif self.kind == 'openways':
+            raw_osm_keyvals = {}
+            raw_osm_keyvals['highway']  = ['motorway', 'residential', 'track']
+            raw_osm_keyvals['waterway'] = ['stream', 'river']   
+
+        return raw_osm_keyvals
+
+    def map_keyval(self, key, val):
+        """
+        maps a key, val pair to remove duplicates, standardize, etc.
+        
+        keyvals: a dict with osm key values
+
+        returns: a (key,value) tuple with the mapped keyval, or (None, None) 
+        """
+        k,v = key,val
+        
+        if k=='crop' and v=='WINE GRAPES':
+            k, v = 'crop', 'grape'
+        if k=='water' and v=='stream;river':
+            k, v = 'water', 'stream'
+
+        return k, v
+
+
+class OSMKeyValueCodesNAIP(OSMKeyValueCodes):
+
+    def init_keyvals(self):
+        if self.kind=='closedways':
+            raw_osm_keyvals = {}
+            raw_osm_keyvals['aeroway'] = ['aerodrome', 'apron', 'runway', 'taxiway']
+            raw_osm_keyvals['amenity'] = ['fuel', 'hospital', 'parking', 'school', 'university']
+            raw_osm_keyvals['bridge'] = ['yes']
+            raw_osm_keyvals['building'] = ['apartments', 'church', 'commercial', 'detached', 'hotel', 'house', 'industrial', 'residential', 'retail', 'school', 'warehouse', 'yes']
+            raw_osm_keyvals['bus'] = ['yes']
+            raw_osm_keyvals['crossing'] = ['marked', 'traffic_signals']
+            raw_osm_keyvals['footway'] = ['crossing', 'sidewalks']
+            raw_osm_keyvals['highway'] = ['cycleway', 'footway', 'path', 'pedestrian', 'residential', 'track']
+            raw_osm_keyvals['industrial'] = ['oil']
+            raw_osm_keyvals['landuse'] = ['cemetary', 'commercial', 'construction', 'farm', 'farmland', 'farmyard', 'forest', 'grass', 'industrial', 'landfill', 'meadow', 'military', 'orchard', 'quarry', 'railway', 'recreation_grounds', 'religious', 'residential', 'retail']
+            raw_osm_keyvals['leisure'] = ['garden', 'golf_course', 'nature_reserve', 'park', 'pitch', 'playground', 'sports_centre', 'swimming_pool']
+            raw_osm_keyvals['natural'] = ['bare_rock', 'coastline', 'desert', 'grassland', 'heath', 'hill', 'mud', 'sand', 'scree', 'scrub', 'valley', 'water', 'wetland', 'wood']
+            raw_osm_keyvals['parking'] = ['surface']
+            raw_osm_keyvals['place'] = ['city', 'village']
+            raw_osm_keyvals['power'] = ['generator', 'plant', 'substation', 'tower']
+            raw_osm_keyvals['public_transport'] = ['platform']
+            raw_osm_keyvals['reservoir_type'] = ['water_storage']
+            raw_osm_keyvals['residential'] = ['apartments', 'trailer_park']
+            raw_osm_keyvals['sport'] = ['baseball', 'basketball', 'soccer', 'tennis']
+            raw_osm_keyvals['surface'] = ['asphalt', 'concrete', 'dirt', 'grass', 'gravel', 'paved', 'sand']
+            raw_osm_keyvals['tourism'] = ['camp_site', 'hotel', 'motel']
+            raw_osm_keyvals['tunnel'] = ['yes']
+            raw_osm_keyvals['water'] = ['basin', 'lake', 'pond', 'reservoir', 'river', 'stream', 'canal']
+            
+        elif self.kind == 'openways':
+            raw_osm_keyvals = {}
+            raw_osm_keyvals['aeroway'] = ['aerodrome', 'apron', 'runway', 'taxiway']
+            raw_osm_keyvals['footway'] = ['crossing', 'sidewalks']
+            raw_osm_keyvals['highway'] = ['cycleway', 'footway', 'path', 'pedestrian', 'residential', 'track']
+            raw_osm_keyvals['natural'] = ['tree', 'tree_row']
+            raw_osm_keyvals['railway'] = ['light_rail', 'rail']
+            raw_osm_keyvals['waterway'] = ['canal', 'river', 'stream']
+
+        return raw_osm_keyvals
+
 class OSMMergedKeyValueCodes:
 
     def __init__(self, kv1, kv2):
@@ -160,10 +229,27 @@ class OSMMergedKeyValueCodes:
             [self.keyvals_codes[self.kv2.inverse_codes[i]] for i in codes2]
         return r
 
-kvopen   = OSMKeyValueCodes(kind='openways')
-kvclosed = OSMKeyValueCodes(kind='closedways')
-kvmerged = OSMMergedKeyValueCodes(kvclosed, kvopen)
-max_code = np.max(list(kvmerged.keyvals_codes.values()))
+
+class OSMCodeSets:
+
+    @classmethod
+    def get(self, codeset):
+        if not codeset in ['sentinel2', 'naip']:
+            raise ValueError(f"invalid codeset '{codeset}', only 'sentinel2' or 'naip' allowed")
+
+        if codeset == 'sentinel2':
+            kvclass = OSMKeyValueCodesSentinel2
+        elif codeset == 'naip':
+            kvclass = OSMKeyValueCodesNAIP
+
+
+        kvopen   = kvclass(kind='openways')
+        kvclosed = kvclass(kind='closedways')
+        kvmerged = OSMMergedKeyValueCodes(kvclosed, kvopen)
+        max_code = np.max(list(kvmerged.keyvals_codes.values()))
+
+        return {'kvopen': kvopen, 'kvclosed': kvclosed, 'kvmerged': kvmerged, 'max_code': max_code}
+
 
 class ImageOSMChip:
 
@@ -171,6 +257,7 @@ class ImageOSMChip:
 
         self.iosmdata = iosmdata
         self.chip_id = chip_id
+        self.osm_codeset = iosmdata.osm_codeset
         
     def read_osm(self, min_area=0):
         """
@@ -234,6 +321,9 @@ class ImageOSMChip:
         flatten = lambda x: [i for j in x for i in j]
         t2str = lambda t: list(np.unique(flatten( [ [f"{k}={v}", f"{k}=*"] for k,v in t.items()])))
         
+        if self.osm is None:
+            return None, None
+            
         oosm = self.osm.copy()
         del (oosm['geometry'])
         oosm = oosm[[i=='way' for i in oosm.kind.values]].copy()
@@ -243,17 +333,27 @@ class ImageOSMChip:
         oosm_open = oosm[oosm.is_open].copy()
         oosm_closed = oosm[oosm.is_closed].copy()
         
+        codeset_def = OSMCodeSets.get(self.osm_codeset)
+        kvopen   = codeset_def['kvopen']
+        kvclosed = codeset_def['kvclosed']
+        kvmerged = codeset_def['kvmerged']
+
         # filter tags
-        oosm_open['tags'] = [kvopen.filter_keyvals(t) for t in oosm_open.tags.values]
-        oosm_closed['tags'] = [kvclosed.filter_keyvals(t) for t in oosm_closed.tags.values]
-        
-        # remove osm objects which ended up with no tags
-        oosm_open   = oosm_open[[len(t)>0 for t in oosm_open.tags.values]]
-        oosm_closed = oosm_closed[[len(t)>0 for t in oosm_closed.tags.values]]
+        if len(oosm_open)>0:
+            oosm_open['tags'] = [kvopen.filter_keyvals(t) for t in oosm_open.tags.values]
+            # remove osm objects which ended up with no tags
+            oosm_open   = oosm_open[[len(t)>0 for t in oosm_open.tags.values]]
+
+        if len(oosm_closed)>0:
+            oosm_closed['tags'] = [kvclosed.filter_keyvals(t) for t in oosm_closed.tags.values]        
+            # remove osm objects which ended up with no tags
+            oosm_closed = oosm_closed[[len(t)>0 for t in oosm_closed.tags.values]]
         
         # merge all
         oosm = pd.concat([oosm_closed, oosm_open])
-        
+        if len(oosm)==0:
+            return None, None
+
         # generate string keyvals for multilabel
         oosm['stags'] = [ t2str(t) for t in oosm['tags']]
         

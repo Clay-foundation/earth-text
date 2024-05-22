@@ -18,12 +18,15 @@ class OSMandEmbeddingsNormalizer:
         self.dataloader = dataloader
         self.train_dataset = dataloader.train_dataset
 
-        self.has_embeddings = self.train_dataset.embeddings_folder is not None
+        self.has_file_embeddings = self.train_dataset.embeddings_folder is not None
+        self.has_metadata_embeddings = self.train_dataset.metadata_has_embeddings
         
         self.force_compute = force_compute
 
-        if self.has_embeddings:
+        if self.has_file_embeddings:
             embeddings_name = self.train_dataset.embeddings_folder.split("/")[-1]
+        elif self.has_metadata_embeddings:
+            embeddings_name = "metadata_embeddings"
         else:
             embeddings_name = "no_embeddings"
 
@@ -39,8 +42,8 @@ class OSMandEmbeddingsNormalizer:
             with open(self.means_stdevs_file, "rb") as f:
                 self.constants = pickle.load(f)
             return
-        else:
-            logger.info("computing mean and stddevs for embeddings and osm vectors")
+
+        logger.info("computing mean and stddevs for embeddings and osm vectors")
 
         embeddings, osm_counts, osm_areas, osm_lengths = [], [], [], []
         for _,item in pbar(self.train_dataset.metadata.iterrows(), max_value=len(self.train_dataset)):
@@ -48,10 +51,12 @@ class OSMandEmbeddingsNormalizer:
             osm_areas.append(item.onehot_area)
             osm_lengths.append(item.onehot_length)
         
-            if self.has_embeddings:
+            if self.has_file_embeddings:
                 embedding = io.read_embedding(self.train_dataset.embeddings_folder,  item['col'], item['row']) 
                 embeddings.append(embedding)
-                        
+            elif self.has_metadata_embeddings:
+                embeddings.append(item['embeddings'])                        
+
         self.constants = {
             'means':{
                     'osm_counts':  np.mean(np.r_[osm_counts], axis=0),
@@ -65,7 +70,7 @@ class OSMandEmbeddingsNormalizer:
             }
         }
 
-        if self.has_embeddings:
+        if self.has_file_embeddings or self.has_metadata_embeddings:
             self.constants['means']['embeddings'] = np.mean(np.r_[embeddings], axis=0)
             self.constants['stdevs']['embeddings'] = np.std(np.r_[embeddings], axis=0)
 
@@ -75,10 +80,16 @@ class OSMandEmbeddingsNormalizer:
 
 
     def normalize_embeddings(self, x):
-        if not self.has_embeddings:
+        if not self.has_file_embeddings and not self.has_metadata_embeddings:
             raise ValueError("this normalizer object has no embeddings")
 
         return  (x - self.constants['means']['embeddings']) / self.constants['stdevs']['embeddings']
+
+    def unnormalize_embeddings(self, x):
+        if not self.has_file_embeddings and not self.has_metadata_embeddings:
+            raise ValueError("this normalizer object has no embeddings")
+
+        return  x * self.constants['stdevs']['embeddings'] + self.constants['means']['embeddings']
 
     def normalize_osm_vector_area(self, x):
         return  (x - self.constants['means']['osm_areas']) / self.constants['stdevs']['osm_areas']
@@ -135,8 +146,9 @@ class ChipMultilabelModule(LightningDataModule):
         get_esawc_proportions = False,
         get_chip_id = False,
         max_items = None,
-        embeddings_normalization = None,
-        normalize_input = False,
+        embeddings_normalization = True,
+        osmvector_normalization = False,
+        osm_codeset = 'sentinel2',
         chip_transforms = None,
         batch_size: int = 16,
         num_workers: int = 1,
@@ -160,7 +172,8 @@ class ChipMultilabelModule(LightningDataModule):
             get_chip_id = get_chip_id,
             max_items = max_items,
             embeddings_normalization = embeddings_normalization,
-            normalize_input = normalize_input,
+            osmvector_normalization = osmvector_normalization,
+            osm_codeset = osm_codeset,
             multilabel_threshold_osm_ohecount = multilabel_threshold_osm_ohecount,
             multilabel_threshold_osm_ohearea = multilabel_threshold_osm_ohearea,
             split="train",
@@ -180,7 +193,8 @@ class ChipMultilabelModule(LightningDataModule):
             get_chip_id = get_chip_id,
             max_items = max_items,
             embeddings_normalization = embeddings_normalization,
-            normalize_input = normalize_input,
+            osmvector_normalization = osmvector_normalization,
+            osm_codeset = osm_codeset,
             multilabel_threshold_osm_ohecount = multilabel_threshold_osm_ohecount,
             multilabel_threshold_osm_ohearea = multilabel_threshold_osm_ohearea,
             split="val",
@@ -200,7 +214,8 @@ class ChipMultilabelModule(LightningDataModule):
             get_chip_id = get_chip_id,
             max_items = max_items,
             embeddings_normalization = embeddings_normalization,
-            normalize_input = normalize_input,
+            osmvector_normalization = osmvector_normalization,
+            osm_codeset = osm_codeset,
             multilabel_threshold_osm_ohecount = multilabel_threshold_osm_ohecount,
             multilabel_threshold_osm_ohearea = multilabel_threshold_osm_ohearea,
             split="test",

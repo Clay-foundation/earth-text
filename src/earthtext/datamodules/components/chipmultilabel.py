@@ -5,6 +5,7 @@ import torch
 from torch.utils.data import Dataset
 from progressbar import progressbar as pbar
 from earthtext.io import io
+from earthtext.osm import multilabel
 import matplotlib.pyplot as plt
 import geopandas as gpd
 import os
@@ -53,8 +54,9 @@ class ChipMultilabelDataset(Dataset):
         multilabel_threshold_osm_ohecount = None,
         multilabel_threshold_osm_ohearea = None,
         max_items = None,
-        embeddings_normalization = None,
-        normalize_input = False,
+        embeddings_normalization = True,
+        osmvector_normalization = False,
+        osm_codeset = 'sentinel2',
         cache_size = -1
     ):
 
@@ -65,9 +67,6 @@ class ChipMultilabelDataset(Dataset):
         """
         if sum([multilabel_threshold_osm_ohecount is None, multilabel_threshold_osm_ohearea is None])!=1:
             raise ValueError("must specify exactly one of 'multilabel_threshold_osm_ohearea' or 'multilabel_threshold_osm_ohecount'")
-
-        if embeddings_normalization is not None and not embeddings_normalization in norm_names.keys():
-            raise ValueError(f"embeddings_normalization '{embeddings_normalization}' does not exist. only {list(norm_names.keys())} allowed")
 
         self.split = split
         self.chips_folder = chips_folder
@@ -83,17 +82,30 @@ class ChipMultilabelDataset(Dataset):
         self.get_osm_ohelength = get_osm_ohelength
         self.max_items = max_items
         self.embeddings_normalization = embeddings_normalization
-        self.normalize_input = normalize_input
+        self.osmvector_normalization = osmvector_normalization
         self.metadata = io.read_multilabel_metadata(metadata_file)
         self.metadata = self.metadata[self.metadata['split']==split]
         self.multilabel_threshold_osm_ohecount = multilabel_threshold_osm_ohecount
         self.multilabel_threshold_osm_ohearea = multilabel_threshold_osm_ohearea
+        self.osm_codeset = osm_codeset
+
+        if 'embeddings' in self.metadata.columns:
+            if self.embeddings_folder is not None:
+                raise ValueError("cannot set 'embeddings_folder' since metadata already has an 'embeddings' column")
+            self.metadata_has_embeddings = True
+            logger.info("using embeddings found in metadata file")
+        else:
+            self.metadata_has_embeddings = False
+
+
         nitems = len(self.metadata)
         # keep only the items for which there is actually a chip image file
-        logger.info(f"checking chip files for {split} split")
-        chips_exists = [io.check_chip_exists(chips_folder, embeddings_folder, patch_embeddings_folder, i['col'], i['row']) \
-                               for _, i in pbar(self.metadata.iterrows(), max_value=len(self.metadata))]
-        self.metadata = self.metadata[chips_exists]
+        if chips_folder is not None:
+            logger.info(f"checking chip files for {split} split")
+            chips_exists = [io.check_chip_exists(chips_folder, embeddings_folder, patch_embeddings_folder, i['col'], i['row']) \
+                                for _, i in pbar(self.metadata.iterrows(), max_value=len(self.metadata))]
+            self.metadata = self.metadata[chips_exists]
+
         logger.info(f"read {split} split with {len(self.metadata)} chip files (out of {nitems})")
         
         if max_items is not None:
@@ -137,7 +149,7 @@ class ChipMultilabelDataset(Dataset):
         item = self.metadata.iloc[idx]
         if self.multilabel_threshold_osm_ohecount is not None:
             multilabel = item.onehot_count.astype(int)
-            multilabel = (multilabel> self.multilabel_threshold_osm_ohecount).astype(int)
+            multilabel = (multilabel >= self.multilabel_threshold_osm_ohecount).astype(int)
 
         if self.multilabel_threshold_osm_ohearea is not None:
             # either area or a bit less than squared length
@@ -157,7 +169,12 @@ class ChipMultilabelDataset(Dataset):
 
         if self.embeddings_folder is not None:
             r['embedding'] = io.read_embedding(self.embeddings_folder,  item['col'], item['row']) 
-            if self.embeddings_normalization is not None:
+            if self.embeddings_normalization:
+                r['embedding'] = self.normalizer.normalize_embeddings(r['embedding'])
+
+        if self.metadata_has_embeddings:
+            r['embedding'] = item['embeddings'].copy()
+            if self.embeddings_normalization:
                 r['embedding'] = self.normalizer.normalize_embeddings(r['embedding'])
                 
         if self.patch_embeddings_folder is not None:
@@ -168,17 +185,17 @@ class ChipMultilabelDataset(Dataset):
 
         if self.get_osm_ohearea:
             r['osm_ohearea'] = np.r_[item.onehot_area]
-            if self.normalize_input:
+            if self.osmvector_normalization:
                 r['osm_ohearea'] = self.normalizer.normalize_osm_vector_area(r['osm_ohearea'])
                 
         if self.get_osm_ohecount:
             r['osm_ohecount'] = np.r_[item.onehot_count]
-            if self.normalize_input:
+            if self.osmvector_normalization:
                 r['osm_ohecount'] = self.normalizer.normalize_osm_vector_count(r['osm_ohecount'])
                 
         if self.get_osm_ohelength:
             r['osm_ohelength'] = np.r_[item.onehot_length]
-            if self.normalize_input:
+            if self.osmvector_normalization:
                 r['osm_ohelength'] = self.normalizer.normalize_osm_vector_length(r['osm_ohelength'])
                 
         if self.get_esawc_proportions:
