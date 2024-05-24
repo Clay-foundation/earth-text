@@ -174,8 +174,6 @@ class ChipMultilabelDataset(Dataset):
 
         if self.metadata_has_embeddings:
             r['embedding'] = item['embeddings']
-            if self.embeddings_normalization:
-                r['embedding'] = self.normalizer.normalize_embeddings(r['embedding'])
 
         if self.patch_embeddings_folder is not None:
             r['patch_embedding'] = io.read_patch_embedding(self.patch_embeddings_folder,  item['col'], item['row'])
