@@ -163,38 +163,32 @@ class OSMKeyValueCodesNAIP(OSMKeyValueCodes):
     def init_keyvals(self):
         if self.kind=='closedways':
             raw_osm_keyvals = {}
-            raw_osm_keyvals['aeroway'] = ['aerodrome', 'apron', 'runway', 'taxiway']
-            raw_osm_keyvals['amenity'] = ['fuel', 'hospital', 'parking', 'school', 'university']
-            raw_osm_keyvals['bridge'] = ['yes']
-            raw_osm_keyvals['building'] = ['apartments', 'church', 'commercial', 'detached', 'hotel', 'house', 'industrial', 'residential', 'retail', 'school', 'warehouse', 'yes']
-            raw_osm_keyvals['bus'] = ['yes']
-            raw_osm_keyvals['crossing'] = ['marked', 'traffic_signals']
-            raw_osm_keyvals['footway'] = ['crossing', 'sidewalks']
-            raw_osm_keyvals['highway'] = ['cycleway', 'footway', 'path', 'pedestrian', 'residential', 'track']
-            raw_osm_keyvals['industrial'] = ['oil']
-            raw_osm_keyvals['landuse'] = ['cemetary', 'commercial', 'construction', 'farm', 'farmland', 'farmyard', 'forest', 'grass', 'industrial', 'landfill', 'meadow', 'military', 'orchard', 'quarry', 'railway', 'recreation_grounds', 'religious', 'residential', 'retail']
-            raw_osm_keyvals['leisure'] = ['garden', 'golf_course', 'nature_reserve', 'park', 'pitch', 'playground', 'sports_centre', 'swimming_pool']
-            raw_osm_keyvals['natural'] = ['bare_rock', 'coastline', 'desert', 'grassland', 'heath', 'hill', 'mud', 'sand', 'scree', 'scrub', 'valley', 'water', 'wetland', 'wood']
-            raw_osm_keyvals['parking'] = ['surface']
-            raw_osm_keyvals['place'] = ['city', 'village']
-            raw_osm_keyvals['power'] = ['generator', 'plant', 'substation', 'tower']
-            raw_osm_keyvals['public_transport'] = ['platform']
-            raw_osm_keyvals['reservoir_type'] = ['water_storage']
-            raw_osm_keyvals['residential'] = ['apartments', 'trailer_park']
-            raw_osm_keyvals['sport'] = ['baseball', 'basketball', 'soccer', 'tennis']
-            raw_osm_keyvals['surface'] = ['asphalt', 'concrete', 'dirt', 'grass', 'gravel', 'paved', 'sand']
-            raw_osm_keyvals['tourism'] = ['camp_site', 'hotel', 'motel']
-            raw_osm_keyvals['tunnel'] = ['yes']
-            raw_osm_keyvals['water'] = ['basin', 'lake', 'pond', 'reservoir', 'river', 'stream', 'canal']
+            raw_osm_keyvals['aeroway']=['aerodrome', 'apron']
+            raw_osm_keyvals['amenity']=['fuel', 'hospital', 'parking', 'school', 'university']
+            raw_osm_keyvals['building']=['apartments', 'church', 'commercial', 'detached', 'hotel', 'house', 'industrial', 'residential', 'retail', 'school', 'warehouse', 'yes']
+            raw_osm_keyvals['crossing']=['traffic_signals']
+            raw_osm_keyvals['footway']=['crossing']
+            raw_osm_keyvals['highway']=['cycleway', 'footway', 'path', 'pedestrian', 'residential', 'track']
+            raw_osm_keyvals['industrial']=['oil']
+            raw_osm_keyvals['landuse']=['commercial', 'construction', 'farm', 'farmland', 'farmyard', 'forest', 'grass', 'industrial', 'landfill', 'meadow', 'military', 'orchard', 'quarry', 'railway', 'religious', 'residential', 'retail']
+            raw_osm_keyvals['leisure']=['garden', 'golf_course', 'nature_reserve', 'park', 'pitch', 'playground', 'sports_centre', 'swimming_pool']
+            raw_osm_keyvals['natural']=['bare_rock', 'desert', 'grassland', 'heath', 'hill', 'mud', 'sand', 'scree', 'scrub', 'water', 'wetland', 'wood']
+            raw_osm_keyvals['parking']=['surface']
+            raw_osm_keyvals['place']=['city', 'village']
+            raw_osm_keyvals['power']=['generator', 'plant', 'substation']
+            raw_osm_keyvals['reservoir_type']=['water_storage']
+            raw_osm_keyvals['residential']=['apartments', 'trailer_park']
+            raw_osm_keyvals['sport']=['baseball', 'basketball', 'soccer', 'tennis']
+            raw_osm_keyvals['surface']=['asphalt', 'concrete', 'grass', 'paved', 'sand']
+            raw_osm_keyvals['tourism']=['camp_site', 'hotel', 'motel']
+            raw_osm_keyvals['water']=['basin', 'canal', 'lake', 'pond', 'reservoir', 'river', 'stream']
             
         elif self.kind == 'openways':
             raw_osm_keyvals = {}
-            raw_osm_keyvals['aeroway'] = ['aerodrome', 'apron', 'runway', 'taxiway']
-            raw_osm_keyvals['footway'] = ['crossing', 'sidewalks']
-            raw_osm_keyvals['highway'] = ['cycleway', 'footway', 'path', 'pedestrian', 'residential', 'track']
-            raw_osm_keyvals['natural'] = ['tree', 'tree_row']
-            raw_osm_keyvals['railway'] = ['light_rail', 'rail']
-            raw_osm_keyvals['waterway'] = ['canal', 'river', 'stream']
+            raw_osm_keyvals['highway']=['cycleway', 'footway', 'path', 'pedestrian', 'residential', 'track']
+            raw_osm_keyvals['natural']=['tree_row']
+            raw_osm_keyvals['railway']=['light_rail', 'rail']
+            raw_osm_keyvals['waterway']=['river', 'stream']
 
         return raw_osm_keyvals
 
@@ -228,7 +222,6 @@ class OSMMergedKeyValueCodes:
         r = [self.keyvals_codes[self.kv1.inverse_codes[i]] for i in codes1] + \
             [self.keyvals_codes[self.kv2.inverse_codes[i]] for i in codes2]
         return r
-
 
 class OSMCodeSets:
 

@@ -8,16 +8,18 @@ dataloader:
   embeddings_normalization: True
   multilabel_threshold_osm_ohecount: 1
   osmvector_normalization: True
-  batch_size: 32
+  batch_size: 8
+  num_workers: 10
 
 model:
   _target_: earthtext.models.osmencoder.OSMEncoder
   output_dim: 768
-  layers_spec: [512, 1024, 2048]
+  layers_spec: [4096, 4096]
   use_osm_counts: True
   use_osm_lengths: True    
+  use_osm_areas: True    
   activation_fn: 'relu'
-  osm_codeset: naip
+  osm_codeset: 'naip'
 
 training:
   loss: 'rmse'
