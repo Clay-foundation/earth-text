@@ -19,7 +19,7 @@ model:
   use_osm_lengths: True    
   use_osm_areas: True    
   activation_fn: 'relu'
-  osm_codeset: naip
+  osm_codeset: 'naip'
 
 training:
   loss: 'rmse'
