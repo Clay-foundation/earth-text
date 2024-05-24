@@ -173,7 +173,7 @@ class ChipMultilabelDataset(Dataset):
                 r['embedding'] = self.normalizer.normalize_embeddings(r['embedding'])
 
         if self.metadata_has_embeddings:
-            r['embedding'] = item['embeddings']
+            r['embedding'] = item['embeddings'].copy()
             if self.embeddings_normalization:
                 r['embedding'] = self.normalizer.normalize_embeddings(r['embedding'])
 
