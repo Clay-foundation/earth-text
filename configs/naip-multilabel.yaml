@@ -1,0 +1,20 @@
+dataloader:
+  _target_: earthtext.datamodules.chipmultilabel.ChipMultilabelModule
+  metadata_file:  /opt/data/california-naip-chips/california-naip-chips-100k.parquet 
+  get_osm_strlabels: True
+  get_osm_ohearea: True
+  get_osm_ohecount: True
+  get_osm_ohelength: True
+  embeddings_normalization: True
+  osmvector_normalization: False
+  # multilabel_threshold_osm_ohecount: 1
+  multilabel_threshold_osm_ohearea: 1
+  batch_size: 16
+  
+model:
+  _target_: earthtext.models.multilabel.MultilabelModel
+  input_dim: 768
+  output_dim: 140
+  layers_spec: [512, 256, 128]
+  activation_fn: 'relu'
+  # osm_codeset: 'naip'
