@@ -1,3 +1,4 @@
+import numpy as np
 import xarray as xr
 import geopandas as gpd
 import os
@@ -42,6 +43,12 @@ def read_embedding(embeddings_folder, col, row):
     fname = f"{embeddings_folder}/worldcover_california_chip_{col}_{row}.pkl"
     with open(fname, "rb") as f:
         r = pickle.load(f)
+    return r
+
+def read_neighbor_embeddings(embeddings_folder, original_chip_id):
+    fname = f"{embeddings_folder}/{original_chip_id}.npy"
+    with open(fname, "rb") as f:
+        r = np.load(f)
     return r
 
 def read_patch_embedding(patch_embeddings_folder, col, row):
