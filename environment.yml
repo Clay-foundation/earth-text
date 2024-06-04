@@ -6,3 +6,6 @@ dependencies:
   - cchardet
   - geopandas
   - einops
+
+channels:
+  - conda-forge

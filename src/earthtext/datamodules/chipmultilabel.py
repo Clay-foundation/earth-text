@@ -94,7 +94,7 @@ class OSMandEmbeddingsNormalizer:
         if not self.has_file_embeddings and not self.has_metadata_embeddings:
             raise ValueError("this normalizer object has no embeddings")
 
-        return  x * self.constants['stdevs']['embeddings'] - self.constants['means']['embeddings']
+        return  x * self.constants['stdevs']['embeddings'] + self.constants['means']['embeddings']
 
     def normalize_osm_vector_area(self, x):
         return  (x - self.constants['means']['osm_areas']) / self.constants['stdevs']['osm_areas']
