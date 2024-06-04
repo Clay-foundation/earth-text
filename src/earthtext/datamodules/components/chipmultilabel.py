@@ -44,6 +44,7 @@ class ChipMultilabelDataset(Dataset):
         chips_folder: str = None,
         embeddings_folder: str = None,
         neighbor_embeddings_folder: str = None,
+        neighborhood_radius: int = None,
         patch_embeddings_folder: str = None,
         chip_transforms = None,
         get_osm_ohecount = False,
@@ -74,6 +75,7 @@ class ChipMultilabelDataset(Dataset):
         self.chip_transforms = chip_transforms
         self.embeddings_folder = embeddings_folder
         self.neighbor_embeddings_folder = neighbor_embeddings_folder
+        self.neighborhood_radius = neighborhood_radius
         self.patch_embeddings_folder = patch_embeddings_folder
         self.get_esawc_proportions = get_esawc_proportions
         self.metadata_file = metadata_file
@@ -179,16 +181,17 @@ class ChipMultilabelDataset(Dataset):
         if self.neighbor_embeddings_folder is not None:
             r['embedding'] = io.read_neighbor_embeddings(embeddings_folder=self.neighbor_embeddings_folder,
                                                          original_chip_id=item['original_chip_id'])
-            if self.embeddings_normalization:
-                r['embedding'] = self.normalizer.normalize_embeddings(r['embedding'])
+            if self.neighborhood_radius is not None:  # slice a smaller neighborhood radius
+                R = self.neighborhood_radius
+                C = r['embedding'].shape[0] // 2  # center embedding
+                r['embedding'] = r['embedding'][(C - R):(C + R + 1), (C - R):(C + R + 1)]
         elif self.embeddings_folder is not None:
             r['embedding'] = io.read_embedding(self.embeddings_folder,  item['col'], item['row'])
-            if self.embeddings_normalization:
-                r['embedding'] = self.normalizer.normalize_embeddings(r['embedding'])
         elif self.metadata_has_embeddings:
             r['embedding'] = item['embeddings'].copy()
-            if self.embeddings_normalization:
-                r['embedding'] = self.normalizer.normalize_embeddings(r['embedding'])
+
+        if self.embeddings_normalization:
+            r['embedding'] = self.normalizer.normalize_embeddings(r['embedding'])
 
         if self.patch_embeddings_folder is not None:
             r['patch_embedding'] = io.read_patch_embedding(self.patch_embeddings_folder,  item['col'], item['row'])
