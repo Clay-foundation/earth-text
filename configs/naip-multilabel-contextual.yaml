@@ -1,6 +1,8 @@
 dataloader:
   _target_: earthtext.datamodules.chipmultilabel.ChipMultilabelModule
-  metadata_file:  /opt/data/california-naip-chips/california-naip-chips-100k.parquet 
+  metadata_file:  /opt/data/california-naip-chips/california-naip-chips-100k.parquet
+  neighbor_embeddings_folder: /opt/data/california-naip-chips/california-naip-chips-100k-neighbours/npy
+  neighborhood_radius: 3
   get_osm_strlabels: True
   get_osm_ohearea: True
   get_osm_ohecount: True
