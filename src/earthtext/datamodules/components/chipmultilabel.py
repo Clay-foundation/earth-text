@@ -193,6 +193,10 @@ class ChipMultilabelDataset(Dataset):
         if self.embeddings_normalization:
             r['embedding'] = self.normalizer.normalize_embeddings(r['embedding'])
 
+        r['embedding'] = torch.tensor(r['embedding'])
+        if r['embedding'].ndim == 3:
+            r['embedding'] = r['embedding'].permute(2, 0, 1)
+
         if self.patch_embeddings_folder is not None:
             r['patch_embedding'] = io.read_patch_embedding(self.patch_embeddings_folder,  item['col'], item['row'])
 
