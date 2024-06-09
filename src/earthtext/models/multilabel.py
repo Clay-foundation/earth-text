@@ -1,5 +1,5 @@
 import torch
-from torch import nn
+from torch import nn, Tensor
 import torch.nn.functional as F
 import numpy as np
 from .utils import activation_from_str
@@ -58,7 +58,7 @@ class DoubleConv2d(nn.Module):
             nn.PReLU(),
         )
 
-     def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         '''
         Args:
             x: Tensor (B, in_channels, H, W).
