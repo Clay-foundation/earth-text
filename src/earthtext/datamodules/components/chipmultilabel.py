@@ -120,7 +120,7 @@ class ChipMultilabelDataset(Dataset):
             files = pd.Series([f.removesuffix('.npy') for f in os.listdir(folder) if os.path.isfile(os.path.join(folder, f))])
             self.metadata = self.metadata[self.metadata['original_chip_id'].isin(files)]
             self.metadata.set_index('original_chip_id', inplace=True)
-
+            self.df_osm_agg = pd.read_parquet(f"{self.folder_neighbors}/osm_aggregate.parquet")
 
         if max_items is not None:
             self.metadata = self.metadata.iloc[np.random.permutation(len(self.metadata))[:max_items]]
@@ -164,24 +164,25 @@ class ChipMultilabelDataset(Dataset):
 
         if self.neighbor_embeddings_folder is not None:
             # Aggregate neighbor OSM data
-            item_neighbors = pd.read_parquet(f"{self.folder_neighbors}/{item.name}.parquet")['chipid']
-            osm_aggregate = self.metadata.loc[item_neighbors[
-                item_neighbors.isin(self.metadata.index)], ['onehot_count', 'onehot_area', 'onehot_length']].sum()
+            # item_neighbors = pd.read_parquet(f"{self.folder_neighbors}/{item.name}.parquet")['chipid']
+            # osm_aggregate = self.metadata.loc[item_neighbors[
+            #     item_neighbors.isin(self.metadata.index)], ['onehot_count', 'onehot_area', 'onehot_length']].sum()
+            osm_aggregate = self.df_osm_agg.loc[item.name]
             if self.multilabel_threshold_osm_ohecount is not None:
-                multilabel = osm_neighbors['onehot_count'].astype(int)
+                multilabel = osm_aggregate['onehot_count'].astype(int)
                 multilabel = (multilabel >= self.multilabel_threshold_osm_ohecount).astype(int)
             if self.multilabel_threshold_osm_ohearea is not None:
                 # either area or a bit less than squared length
                 min_ohe_length = np.sqrt(self.multilabel_threshold_osm_ohearea)*4 / 1.5
-                multilabel = (osm_aggregate.onehot_area > self.multilabel_threshold_osm_ohearea) | (osm_aggregate.onehot_length > min_ohe_length)
+                multilabel = (osm_aggregate['onehot_area'] > self.multilabel_threshold_osm_ohearea) | (osm_aggregate['onehot_length'] > min_ohe_length)
         else:
             if self.multilabel_threshold_osm_ohecount is not None:
-                multilabel = item.onehot_count.astype(int)
+                multilabel = item['onehot_count'].astype(int)
                 multilabel = (multilabel >= self.multilabel_threshold_osm_ohecount).astype(int)
             if self.multilabel_threshold_osm_ohearea is not None:
                 # either area or a bit less than squared length
                 min_ohe_length = np.sqrt(self.multilabel_threshold_osm_ohearea)*4 / 1.5
-                multilabel = (item.onehot_area > self.multilabel_threshold_osm_ohearea) | (item.onehot_length > min_ohe_length)
+                multilabel = (item['onehot_area'] > self.multilabel_threshold_osm_ohearea) | (item['onehot_length'] > min_ohe_length)
 
         r['multilabel'] = torch.tensor(multilabel).type(torch.int8)
 
