@@ -43,6 +43,7 @@ class ChipMultilabelDataset(Dataset):
         split: str,
         chips_folder: str = None,
         embeddings_folder: str = None,
+        neighbor_embeddings_folder: str = None,
         patch_embeddings_folder: str = None,
         chip_transforms = None,
         get_osm_ohecount = False,
@@ -72,6 +73,7 @@ class ChipMultilabelDataset(Dataset):
         self.chips_folder = chips_folder
         self.chip_transforms = chip_transforms
         self.embeddings_folder = embeddings_folder
+        self.neighbor_embeddings_folder = neighbor_embeddings_folder
         self.patch_embeddings_folder = patch_embeddings_folder
         self.get_esawc_proportions = get_esawc_proportions
         self.metadata_file = metadata_file
@@ -107,7 +109,14 @@ class ChipMultilabelDataset(Dataset):
             self.metadata = self.metadata[chips_exists]
 
         logger.info(f"read {split} split with {len(self.metadata)} chip files (out of {nitems})")
-        
+
+        # Remove chip IDs with no associated neighbors .npy files
+        if self.neighbor_embeddings_folder is not None:
+            logger.info(f"removing chip IDs with no associated neighbors .npy files")
+            folder = self.neighbor_embeddings_folder
+            files = pd.Series([f.removesuffix('.npy') for f in os.listdir(folder) if os.path.isfile(os.path.join(folder, f))])
+            self.metadata = self.metadata[self.metadata['original_chip_id'].isin(files)]
+
         if max_items is not None:
             self.metadata = self.metadata.iloc[np.random.permutation(len(self.metadata))[:max_items]]
             logger.info(f"limitting to {max_items} items, randomly selected")
@@ -167,12 +176,16 @@ class ChipMultilabelDataset(Dataset):
                 chip = self.chip_transforms(chip)
             r['chip'] = chip
 
-        if self.embeddings_folder is not None:
-            r['embedding'] = io.read_embedding(self.embeddings_folder,  item['col'], item['row']) 
+        if self.neighbor_embeddings_folder is not None:
+            r['embedding'] = io.read_neighbor_embeddings(embeddings_folder=self.neighbor_embeddings_folder,
+                                                         original_chip_id=item['original_chip_id'])
             if self.embeddings_normalization:
                 r['embedding'] = self.normalizer.normalize_embeddings(r['embedding'])
-
-        if self.metadata_has_embeddings:
+        elif self.embeddings_folder is not None:
+            r['embedding'] = io.read_embedding(self.embeddings_folder,  item['col'], item['row'])
+            if self.embeddings_normalization:
+                r['embedding'] = self.normalizer.normalize_embeddings(r['embedding'])
+        elif self.metadata_has_embeddings:
             r['embedding'] = item['embeddings'].copy()
             if self.embeddings_normalization:
                 r['embedding'] = self.normalizer.normalize_embeddings(r['embedding'])
@@ -187,12 +200,12 @@ class ChipMultilabelDataset(Dataset):
             r['osm_ohearea'] = np.r_[item.onehot_area]
             if self.osmvector_normalization:
                 r['osm_ohearea'] = self.normalizer.normalize_osm_vector_area(r['osm_ohearea'])
-                
+
         if self.get_osm_ohecount:
             r['osm_ohecount'] = np.r_[item.onehot_count]
             if self.osmvector_normalization:
                 r['osm_ohecount'] = self.normalizer.normalize_osm_vector_count(r['osm_ohecount'])
-                
+
         if self.get_osm_ohelength:
             r['osm_ohelength'] = np.r_[item.onehot_length]
             if self.osmvector_normalization:

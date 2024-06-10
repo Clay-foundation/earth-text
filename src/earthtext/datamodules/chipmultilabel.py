@@ -82,8 +82,13 @@ class OSMandEmbeddingsNormalizer:
     def normalize_embeddings(self, x):
         if not self.has_file_embeddings and not self.has_metadata_embeddings:
             raise ValueError("this normalizer object has no embeddings")
+        _x = (x - self.constants['means']['embeddings']) / self.constants['stdevs']['embeddings']
 
-        return  (x - self.constants['means']['embeddings']) / self.constants['stdevs']['embeddings']
+        if x.ndim == 3:  # x is a neighbors 3D array. Masked normalization of each neighbor embedding.
+            zero_mask = x.sum(axis=-1) == 0
+            _x[zero_mask] = 0
+
+        return _x
 
     def unnormalize_embeddings(self, x):
         if not self.has_file_embeddings and not self.has_metadata_embeddings:
@@ -137,6 +142,7 @@ class ChipMultilabelModule(LightningDataModule):
         chips_folder: str = None,
         embeddings_folder: str = None,
         patch_embeddings_folder: str = None,
+        neighbor_embeddings_folder: str = None,
         multilabel_threshold_osm_ohecount = None,
         multilabel_threshold_osm_ohearea = None,
         get_osm_strlabels = False,
@@ -163,6 +169,7 @@ class ChipMultilabelModule(LightningDataModule):
             chips_folder = chips_folder,
             embeddings_folder = embeddings_folder,
             patch_embeddings_folder = patch_embeddings_folder,
+            neighbor_embeddings_folder = neighbor_embeddings_folder,
             chip_transforms = chip_transforms,
             get_osm_strlabels = get_osm_strlabels,
             get_osm_ohecount = get_osm_ohecount,
@@ -184,6 +191,7 @@ class ChipMultilabelModule(LightningDataModule):
             chips_folder = chips_folder,
             embeddings_folder = embeddings_folder,
             patch_embeddings_folder = patch_embeddings_folder,
+            neighbor_embeddings_folder = neighbor_embeddings_folder,
             chip_transforms=chip_transforms,
             get_osm_strlabels = get_osm_strlabels,
             get_osm_ohecount = get_osm_ohecount,
@@ -205,6 +213,7 @@ class ChipMultilabelModule(LightningDataModule):
             chips_folder = chips_folder,
             embeddings_folder = embeddings_folder,
             patch_embeddings_folder = patch_embeddings_folder,
+            neighbor_embeddings_folder = neighbor_embeddings_folder,
             chip_transforms = chip_transforms,
             get_osm_strlabels = get_osm_strlabels,
             get_osm_ohecount = get_osm_ohecount,
