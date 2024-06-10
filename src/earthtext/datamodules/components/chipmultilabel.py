@@ -92,6 +92,7 @@ class ChipMultilabelDataset(Dataset):
         self.multilabel_threshold_osm_ohecount = multilabel_threshold_osm_ohecount
         self.multilabel_threshold_osm_ohearea = multilabel_threshold_osm_ohearea
         self.osm_codeset = osm_codeset
+        self.folder_neighbors = "/opt/data/california-naip-chips/california-naip-chips-100k-neighbours"
 
         if 'embeddings' in self.metadata.columns:
             if self.embeddings_folder is not None:
@@ -118,6 +119,8 @@ class ChipMultilabelDataset(Dataset):
             folder = self.neighbor_embeddings_folder
             files = pd.Series([f.removesuffix('.npy') for f in os.listdir(folder) if os.path.isfile(os.path.join(folder, f))])
             self.metadata = self.metadata[self.metadata['original_chip_id'].isin(files)]
+            self.metadata.set_index('original_chip_id', inplace=True)
+
 
         if max_items is not None:
             self.metadata = self.metadata.iloc[np.random.permutation(len(self.metadata))[:max_items]]
@@ -158,14 +161,27 @@ class ChipMultilabelDataset(Dataset):
         r = {}        
 
         item = self.metadata.iloc[idx]
-        if self.multilabel_threshold_osm_ohecount is not None:
-            multilabel = item.onehot_count.astype(int)
-            multilabel = (multilabel >= self.multilabel_threshold_osm_ohecount).astype(int)
 
-        if self.multilabel_threshold_osm_ohearea is not None:
-            # either area or a bit less than squared length
-            min_ohe_length = np.sqrt(self.multilabel_threshold_osm_ohearea)*4 / 1.5
-            multilabel = (item.onehot_area > self.multilabel_threshold_osm_ohearea) | (item.onehot_length > min_ohe_length)
+        if self.neighbor_embeddings_folder is not None:
+            # Aggregate neighbor OSM data
+            item_neighbors = pd.read_parquet(f"{self.folder_neighbors}/{item.name}.parquet")['chipid']
+            osm_aggregate = self.metadata.loc[item_neighbors[
+                item_neighbors.isin(self.metadata.index)], ['onehot_count', 'onehot_area', 'onehot_length']].sum()
+            if self.multilabel_threshold_osm_ohecount is not None:
+                multilabel = osm_neighbors['onehot_count'].astype(int)
+                multilabel = (multilabel >= self.multilabel_threshold_osm_ohecount).astype(int)
+            if self.multilabel_threshold_osm_ohearea is not None:
+                # either area or a bit less than squared length
+                min_ohe_length = np.sqrt(self.multilabel_threshold_osm_ohearea)*4 / 1.5
+                multilabel = (osm_aggregate.onehot_area > self.multilabel_threshold_osm_ohearea) | (osm_aggregate.onehot_length > min_ohe_length)
+        else:
+            if self.multilabel_threshold_osm_ohecount is not None:
+                multilabel = item.onehot_count.astype(int)
+                multilabel = (multilabel >= self.multilabel_threshold_osm_ohecount).astype(int)
+            if self.multilabel_threshold_osm_ohearea is not None:
+                # either area or a bit less than squared length
+                min_ohe_length = np.sqrt(self.multilabel_threshold_osm_ohearea)*4 / 1.5
+                multilabel = (item.onehot_area > self.multilabel_threshold_osm_ohearea) | (item.onehot_length > min_ohe_length)
 
         r['multilabel'] = torch.tensor(multilabel).type(torch.int8)
 
@@ -180,7 +196,7 @@ class ChipMultilabelDataset(Dataset):
 
         if self.neighbor_embeddings_folder is not None:
             r['embedding'] = io.read_neighbor_embeddings(embeddings_folder=self.neighbor_embeddings_folder,
-                                                         original_chip_id=item['original_chip_id'])
+                                                         original_chip_id=item.name)
             if self.neighborhood_radius is not None:  # slice a smaller neighborhood radius
                 R = self.neighborhood_radius
                 C = r['embedding'].shape[0] // 2  # center embedding
