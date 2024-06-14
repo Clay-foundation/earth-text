@@ -44,6 +44,7 @@ class ChipMultilabelDataset(Dataset):
         chips_folder: str = None,
         embeddings_folder: str = None,
         neighbor_embeddings_folder: str = None,
+        neighborhood_radius: int = None,
         patch_embeddings_folder: str = None,
         chip_transforms = None,
         get_osm_ohecount = False,
@@ -74,6 +75,7 @@ class ChipMultilabelDataset(Dataset):
         self.chip_transforms = chip_transforms
         self.embeddings_folder = embeddings_folder
         self.neighbor_embeddings_folder = neighbor_embeddings_folder
+        self.neighborhood_radius = neighborhood_radius
         self.patch_embeddings_folder = patch_embeddings_folder
         self.get_esawc_proportions = get_esawc_proportions
         self.metadata_file = metadata_file
@@ -90,6 +92,7 @@ class ChipMultilabelDataset(Dataset):
         self.multilabel_threshold_osm_ohecount = multilabel_threshold_osm_ohecount
         self.multilabel_threshold_osm_ohearea = multilabel_threshold_osm_ohearea
         self.osm_codeset = osm_codeset
+        self.folder_neighbors = "/opt/data/california-naip-chips/california-naip-chips-100k-neighbours"
 
         if 'embeddings' in self.metadata.columns:
             if self.embeddings_folder is not None:
@@ -116,6 +119,8 @@ class ChipMultilabelDataset(Dataset):
             folder = self.neighbor_embeddings_folder
             files = pd.Series([f.removesuffix('.npy') for f in os.listdir(folder) if os.path.isfile(os.path.join(folder, f))])
             self.metadata = self.metadata[self.metadata['original_chip_id'].isin(files)]
+            self.metadata.set_index('original_chip_id', inplace=True)
+            self.df_osm_agg = pd.read_parquet(f"{self.folder_neighbors}/osm_aggregate.parquet")
 
         if max_items is not None:
             self.metadata = self.metadata.iloc[np.random.permutation(len(self.metadata))[:max_items]]
@@ -156,14 +161,28 @@ class ChipMultilabelDataset(Dataset):
         r = {}        
 
         item = self.metadata.iloc[idx]
-        if self.multilabel_threshold_osm_ohecount is not None:
-            multilabel = item.onehot_count.astype(int)
-            multilabel = (multilabel >= self.multilabel_threshold_osm_ohecount).astype(int)
 
-        if self.multilabel_threshold_osm_ohearea is not None:
-            # either area or a bit less than squared length
-            min_ohe_length = np.sqrt(self.multilabel_threshold_osm_ohearea)*4 / 1.5
-            multilabel = (item.onehot_area > self.multilabel_threshold_osm_ohearea) | (item.onehot_length > min_ohe_length)
+        if self.neighbor_embeddings_folder is not None:
+            # Aggregate neighbor OSM data
+            # item_neighbors = pd.read_parquet(f"{self.folder_neighbors}/{item.name}.parquet")['chipid']
+            # osm_aggregate = self.metadata.loc[item_neighbors[
+            #     item_neighbors.isin(self.metadata.index)], ['onehot_count', 'onehot_area', 'onehot_length']].sum()
+            osm_aggregate = self.df_osm_agg.loc[item.name]
+            if self.multilabel_threshold_osm_ohecount is not None:
+                multilabel = osm_aggregate['onehot_count'].astype(int)
+                multilabel = (multilabel >= self.multilabel_threshold_osm_ohecount).astype(int)
+            if self.multilabel_threshold_osm_ohearea is not None:
+                # either area or a bit less than squared length
+                min_ohe_length = np.sqrt(self.multilabel_threshold_osm_ohearea)*4 / 1.5
+                multilabel = (osm_aggregate['onehot_area'] > self.multilabel_threshold_osm_ohearea) | (osm_aggregate['onehot_length'] > min_ohe_length)
+        else:
+            if self.multilabel_threshold_osm_ohecount is not None:
+                multilabel = item['onehot_count'].astype(int)
+                multilabel = (multilabel >= self.multilabel_threshold_osm_ohecount).astype(int)
+            if self.multilabel_threshold_osm_ohearea is not None:
+                # either area or a bit less than squared length
+                min_ohe_length = np.sqrt(self.multilabel_threshold_osm_ohearea)*4 / 1.5
+                multilabel = (item['onehot_area'] > self.multilabel_threshold_osm_ohearea) | (item['onehot_length'] > min_ohe_length)
 
         r['multilabel'] = torch.tensor(multilabel).type(torch.int8)
 
@@ -178,17 +197,22 @@ class ChipMultilabelDataset(Dataset):
 
         if self.neighbor_embeddings_folder is not None:
             r['embedding'] = io.read_neighbor_embeddings(embeddings_folder=self.neighbor_embeddings_folder,
-                                                         original_chip_id=item['original_chip_id'])
-            if self.embeddings_normalization:
-                r['embedding'] = self.normalizer.normalize_embeddings(r['embedding'])
+                                                         original_chip_id=item.name)
+            if self.neighborhood_radius is not None:  # slice a smaller neighborhood radius
+                R = self.neighborhood_radius
+                C = r['embedding'].shape[0] // 2  # center embedding
+                r['embedding'] = r['embedding'][(C - R):(C + R + 1), (C - R):(C + R + 1)]
         elif self.embeddings_folder is not None:
             r['embedding'] = io.read_embedding(self.embeddings_folder,  item['col'], item['row'])
-            if self.embeddings_normalization:
-                r['embedding'] = self.normalizer.normalize_embeddings(r['embedding'])
         elif self.metadata_has_embeddings:
             r['embedding'] = item['embeddings'].copy()
-            if self.embeddings_normalization:
-                r['embedding'] = self.normalizer.normalize_embeddings(r['embedding'])
+
+        if self.embeddings_normalization:
+            r['embedding'] = self.normalizer.normalize_embeddings(r['embedding'])
+
+        r['embedding'] = torch.tensor(r['embedding'])
+        if r['embedding'].ndim == 3:
+            r['embedding'] = r['embedding'].permute(2, 0, 1)
 
         if self.patch_embeddings_folder is not None:
             r['patch_embedding'] = io.read_patch_embedding(self.patch_embeddings_folder,  item['col'], item['row'])
