@@ -96,6 +96,7 @@ class OSMandEmbeddingsNormalizer:
 
         return  x * self.constants['stdevs']['embeddings'] + self.constants['means']['embeddings']
 
+    # TODO: the three normalizer functions below must be modified for the case of a cube input
     def normalize_osm_vector_area(self, x):
         return  (x - self.constants['means']['osm_areas']) / self.constants['stdevs']['osm_areas']
 
