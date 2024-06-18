@@ -45,6 +45,7 @@ class ChipMultilabelDataset(Dataset):
         embeddings_folder: str = None,
         neighbor_embeddings_folder: str = None,
         neighborhood_radius: int = None,
+        collapse_osm_cube: bool = False,
         patch_embeddings_folder: str = None,
         chip_transforms = None,
         get_osm_ohecount = False,
@@ -74,8 +75,11 @@ class ChipMultilabelDataset(Dataset):
         self.chips_folder = chips_folder
         self.chip_transforms = chip_transforms
         self.embeddings_folder = embeddings_folder
+
         self.neighbor_embeddings_folder = neighbor_embeddings_folder
         self.neighborhood_radius = neighborhood_radius
+        self.collapse_osm_cube = collapse_osm_cube
+
         self.patch_embeddings_folder = patch_embeddings_folder
         self.get_esawc_proportions = get_esawc_proportions
         self.metadata_file = metadata_file
@@ -173,17 +177,14 @@ class ChipMultilabelDataset(Dataset):
                 C = osm_cube.shape[-1] // 2  # center embedding
                 osm_cube = osm_cube[:, :, (C - R):(C + R + 1), (C - R):(C + R + 1)]  # (T, 3, 2R+1, 2R+1)
 
-            ## Neighbors aggregate OSM vector
-            # osm_aggregate = osm_cube.sum(axis=(2, 3))  # (T, 3)
+            if self.collapse_osm_cube:  # Aggregate neighborhood OSM data
+                osm_cube = osm_cube.sum(axis=(2, 3))  # (T, 3)
+
             if self.multilabel_threshold_osm_ohecount is not None:
-                # multilabel = osm_aggregate['onehot_count'].astype(int)
-                multilabel = osm_cube[:, 0].astype(int)  # (T, 2R+1, 2R+1)
-                multilabel = (multilabel >= self.multilabel_threshold_osm_ohecount).astype(int)
+                multilabel = (osm_cube[:, 0] >= self.multilabel_threshold_osm_ohecount).astype(int)  # (T, 2R+1, 2R+1) or (T,)
             if self.multilabel_threshold_osm_ohearea is not None:
                 # Either area or a bit less than squared length
                 min_ohe_length = np.sqrt(self.multilabel_threshold_osm_ohearea)*4 / 1.5
-                # multilabel = ((osm_aggregate['onehot_area'] > self.multilabel_threshold_osm_ohearea) |
-                #               (osm_aggregate['onehot_length'] > min_ohe_length))
                 multilabel = ((osm_cube[:, 1] > self.multilabel_threshold_osm_ohearea) | (osm_cube[:, 2] > min_ohe_length))
         else:
             if self.multilabel_threshold_osm_ohecount is not None:
@@ -194,7 +195,7 @@ class ChipMultilabelDataset(Dataset):
                 min_ohe_length = np.sqrt(self.multilabel_threshold_osm_ohearea)*4 / 1.5
                 multilabel = (item['onehot_area'] > self.multilabel_threshold_osm_ohearea) | (item['onehot_length'] > min_ohe_length)
 
-        r['multilabel'] = torch.tensor(multilabel).type(torch.int8)
+        r['multilabel'] = torch.tensor(multilabel).type(torch.int8)  # (T, 2R+1, 2R+1) or (T,)
 
         if self.get_chip_id:
             r['chip_id'] = item.name
