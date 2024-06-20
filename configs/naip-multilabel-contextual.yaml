@@ -18,7 +18,7 @@ dataloader:
   num_workers: 4
   
 model:
-  _target_: earthtext.models.multilabel.MultisizeContextualCNN
+  _target_: earthtext.models.multilabel.MultiscaleContextualCNN
   input_dim: 768
   output_dim: 140
   layers_spec: [512, 256, 128]

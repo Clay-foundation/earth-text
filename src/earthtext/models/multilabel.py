@@ -69,14 +69,53 @@ class DoubleConv2d(nn.Module):
 
 
 
+class MultiscaleContextualCNN(nn.Module):
+
+    def __init__(self, input_dim: int, output_dim: int, layers_spec = [10], activation_fn='relu') -> None:
+
+        super().__init__()
+
+        i, o = input_dim, output_dim  # aliases
+
+        cnn_ = lambda k: nn.Sequential(nn.Conv2d(in_channels=i, out_channels=i, kernel_size=k, padding=k//2, groups=i),
+                                       nn.ReLU(),
+                                       nn.Conv2d(in_channels=i, out_channels=i, kernel_size=k, padding=k//2, groups=i),
+                                       nn.ReLU())
+
+        self.cnn_3 = cnn_(3)
+        self.cnn_5 = cnn_(5)
+        self.cnn_7 = cnn_(7)
+        self.cnn_9 = cnn_(9)
+        self.cnn_11 = cnn_(11)
+        self.final  = MultilabelModel(input_dim=6*i, output_dim=o, layers_spec=layers_spec, activation_fn=activation_fn)
+
+    def forward(self, x: Tensor) -> Tensor:
+        """
+        Args:
+            x: Tensor (B, C, H, W), batch of images.
+        Returns:
+            Tensor (B, out_channels)
+        """
+        w_3 = self.cnn_3(x)  # (B, C, H, W)
+        w_5 = self.cnn_5(x)
+        w_7 = self.cnn_7(x)
+        w_9 = self.cnn_9(x)
+        w_11 = self.cnn_11(x)
+
+        w = torch.concat([x, w_3, w_5, w_7, w_9, w_11], dim=1)  # concatenate multi-scale encodings, (B, 5C, H, W)
+        w = w.mean(dim=(2, 3))  # (B, 5C) global average pooling
+        y = self.final(w)  # (B, o)
+
+        return y
+
+
 class MultisizeContextualCNN(nn.Module):
 
     def __init__(self, input_dim: int, output_dim: int, layers_spec = [10], activation_fn='relu') -> None:
 
         super().__init__()
 
-        # aliases
-        i, o = input_dim, output_dim
+        i, o = input_dim, output_dim  # aliases
 
         self.encoder_1 = nn.Conv2d(in_channels=i, out_channels=i, kernel_size=3, padding=0, groups=i)
         self.encoder_2 = nn.Conv2d(in_channels=i, out_channels=i, kernel_size=5, padding=0, groups=i)
