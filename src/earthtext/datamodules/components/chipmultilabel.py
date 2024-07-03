@@ -45,6 +45,7 @@ class ChipMultilabelDataset(Dataset):
         embeddings_folder: str = None,
         neighbor_embeddings_folder: str = None,
         neighborhood_radius: int = None,
+        collapse_osm_cube: bool = False,
         patch_embeddings_folder: str = None,
         chip_transforms = None,
         get_osm_ohecount = False,
@@ -74,8 +75,11 @@ class ChipMultilabelDataset(Dataset):
         self.chips_folder = chips_folder
         self.chip_transforms = chip_transforms
         self.embeddings_folder = embeddings_folder
+
         self.neighbor_embeddings_folder = neighbor_embeddings_folder
         self.neighborhood_radius = neighborhood_radius
+        self.collapse_osm_cube = collapse_osm_cube
+
         self.patch_embeddings_folder = patch_embeddings_folder
         self.get_esawc_proportions = get_esawc_proportions
         self.metadata_file = metadata_file
@@ -163,18 +167,25 @@ class ChipMultilabelDataset(Dataset):
         item = self.metadata.iloc[idx]
 
         if self.neighbor_embeddings_folder is not None:
-            # Aggregate neighbor OSM data
-            # item_neighbors = pd.read_parquet(f"{self.folder_neighbors}/{item.name}.parquet")['chipid']
-            # osm_aggregate = self.metadata.loc[item_neighbors[
-            #     item_neighbors.isin(self.metadata.index)], ['onehot_count', 'onehot_area', 'onehot_length']].sum()
-            osm_aggregate = self.df_osm_agg.loc[item.name]
+
+            # Neighbors OSM cube
+            neighbor_osm_folder = self.neighbor_embeddings_folder.removesuffix('npy') + 'osm'
+            osm_cube = io.read_neighbor_embeddings(embeddings_folder=neighbor_osm_folder,
+                                                   original_chip_id=(item.name + '.osm'))  # (T, 3, 17, 17)
+            if self.neighborhood_radius is not None:  # slice a smaller neighborhood radius
+                R = self.neighborhood_radius
+                C = osm_cube.shape[-1] // 2  # center embedding
+                osm_cube = osm_cube[:, :, (C - R):(C + R + 1), (C - R):(C + R + 1)]  # (T, 3, 2R+1, 2R+1)
+
+            if self.collapse_osm_cube:  # Aggregate neighborhood OSM data
+                osm_cube = osm_cube.sum(axis=(2, 3))  # (T, 3)
+
             if self.multilabel_threshold_osm_ohecount is not None:
-                multilabel = osm_aggregate['onehot_count'].astype(int)
-                multilabel = (multilabel >= self.multilabel_threshold_osm_ohecount).astype(int)
+                multilabel = (osm_cube[:, 0] >= self.multilabel_threshold_osm_ohecount).astype(int)  # (T, 2R+1, 2R+1) or (T,)
             if self.multilabel_threshold_osm_ohearea is not None:
-                # either area or a bit less than squared length
+                # Either area or a bit less than squared length
                 min_ohe_length = np.sqrt(self.multilabel_threshold_osm_ohearea)*4 / 1.5
-                multilabel = (osm_aggregate['onehot_area'] > self.multilabel_threshold_osm_ohearea) | (osm_aggregate['onehot_length'] > min_ohe_length)
+                multilabel = ((osm_cube[:, 1] > self.multilabel_threshold_osm_ohearea) | (osm_cube[:, 2] > min_ohe_length))
         else:
             if self.multilabel_threshold_osm_ohecount is not None:
                 multilabel = item['onehot_count'].astype(int)
@@ -184,7 +195,7 @@ class ChipMultilabelDataset(Dataset):
                 min_ohe_length = np.sqrt(self.multilabel_threshold_osm_ohearea)*4 / 1.5
                 multilabel = (item['onehot_area'] > self.multilabel_threshold_osm_ohearea) | (item['onehot_length'] > min_ohe_length)
 
-        r['multilabel'] = torch.tensor(multilabel).type(torch.int8)
+        r['multilabel'] = torch.tensor(multilabel).type(torch.int8)  # (T, 2R+1, 2R+1) or (T,)
 
         if self.get_chip_id:
             r['chip_id'] = item.name
@@ -196,12 +207,11 @@ class ChipMultilabelDataset(Dataset):
             r['chip'] = chip
 
         if self.neighbor_embeddings_folder is not None:
-            r['embedding'] = io.read_neighbor_embeddings(embeddings_folder=self.neighbor_embeddings_folder,
-                                                         original_chip_id=item.name)
+            r['embedding'] = io.read_neighbor_embeddings(embeddings_folder=self.neighbor_embeddings_folder, original_chip_id=item.name)
             if self.neighborhood_radius is not None:  # slice a smaller neighborhood radius
                 R = self.neighborhood_radius
                 C = r['embedding'].shape[0] // 2  # center embedding
-                r['embedding'] = r['embedding'][(C - R):(C + R + 1), (C - R):(C + R + 1)]
+                r['embedding'] = r['embedding'][(C - R):(C + R + 1), (C - R):(C + R + 1), :]
         elif self.embeddings_folder is not None:
             r['embedding'] = io.read_embedding(self.embeddings_folder,  item['col'], item['row'])
         elif self.metadata_has_embeddings:
@@ -221,18 +231,30 @@ class ChipMultilabelDataset(Dataset):
             r['osm_strlabels'] = " ".join(item.string_labels)
 
         if self.get_osm_ohearea:
-            r['osm_ohearea'] = np.r_[item.onehot_area]
+            if self.neighbor_embeddings_folder is not None:
+                r['osm_ohearea'] = osm_cube[:, 1]  # one-hot area, (T, 2R+1, 2R+1)
+            else:
+                r['osm_ohearea'] = np.r_[item['onehot_area']]
             if self.osmvector_normalization:
+                # TODO: modify self.normalizer.normalize_osm_vector_area
                 r['osm_ohearea'] = self.normalizer.normalize_osm_vector_area(r['osm_ohearea'])
 
         if self.get_osm_ohecount:
-            r['osm_ohecount'] = np.r_[item.onehot_count]
+            if self.neighbor_embeddings_folder is not None:
+                r['osm_ohecount'] = osm_cube[:, 0]  # one-hot count, (T, 2R+1, 2R+1)
+            else:
+                r['osm_ohecount'] = np.r_[item['onehot_count']]
             if self.osmvector_normalization:
+                # TODO: modify self.normalizer.normalize_osm_vector_count
                 r['osm_ohecount'] = self.normalizer.normalize_osm_vector_count(r['osm_ohecount'])
 
         if self.get_osm_ohelength:
-            r['osm_ohelength'] = np.r_[item.onehot_length]
+            if self.neighbor_embeddings_folder is not None:
+                r['osm_ohelength'] = osm_cube[:, 2]  # one-hot count, (T, 2R+1, 2R+1)
+            else:
+                r['osm_ohelength'] = np.r_[item['onehot_length']]
             if self.osmvector_normalization:
+                # TODO: modify self.normalizer.normalize_osm_vector_length
                 r['osm_ohelength'] = self.normalizer.normalize_osm_vector_length(r['osm_ohelength'])
                 
         if self.get_esawc_proportions:

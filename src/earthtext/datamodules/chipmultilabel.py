@@ -96,6 +96,7 @@ class OSMandEmbeddingsNormalizer:
 
         return  x * self.constants['stdevs']['embeddings'] + self.constants['means']['embeddings']
 
+    # TODO: the three normalizer functions below must be modified for the case of a cube input
     def normalize_osm_vector_area(self, x):
         return  (x - self.constants['means']['osm_areas']) / self.constants['stdevs']['osm_areas']
 
@@ -144,6 +145,7 @@ class ChipMultilabelModule(LightningDataModule):
         patch_embeddings_folder: str = None,
         neighbor_embeddings_folder: str = None,
         neighborhood_radius: int = None,
+        collapse_osm_cube: bool = False,
         multilabel_threshold_osm_ohecount = None,
         multilabel_threshold_osm_ohearea = None,
         get_osm_strlabels = False,
@@ -172,6 +174,7 @@ class ChipMultilabelModule(LightningDataModule):
             patch_embeddings_folder = patch_embeddings_folder,
             neighbor_embeddings_folder = neighbor_embeddings_folder,
             neighborhood_radius = neighborhood_radius,
+            collapse_osm_cube = collapse_osm_cube,
             chip_transforms = chip_transforms,
             get_osm_strlabels = get_osm_strlabels,
             get_osm_ohecount = get_osm_ohecount,
@@ -195,6 +198,7 @@ class ChipMultilabelModule(LightningDataModule):
             patch_embeddings_folder = patch_embeddings_folder,
             neighbor_embeddings_folder = neighbor_embeddings_folder,
             neighborhood_radius = neighborhood_radius,
+            collapse_osm_cube = collapse_osm_cube,
             chip_transforms=chip_transforms,
             get_osm_strlabels = get_osm_strlabels,
             get_osm_ohecount = get_osm_ohecount,
@@ -218,6 +222,7 @@ class ChipMultilabelModule(LightningDataModule):
             patch_embeddings_folder = patch_embeddings_folder,
             neighbor_embeddings_folder = neighbor_embeddings_folder,
             neighborhood_radius = neighborhood_radius,
+            collapse_osm_cube = collapse_osm_cube,
             chip_transforms = chip_transforms,
             get_osm_strlabels = get_osm_strlabels,
             get_osm_ohecount = get_osm_ohecount,
